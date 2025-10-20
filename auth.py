@@ -11,10 +11,9 @@ def get_user(email):
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM users WHERE email = %s", (email,)) 
         user = cursor.fetchone()
+        return user
     finally: 
         return_db_connection(conn)
-    conn.close()
-    return user
 
 def create_access_token(data: dict):
     """Creates a new JWT access token."""

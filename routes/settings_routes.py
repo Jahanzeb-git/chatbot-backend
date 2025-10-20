@@ -1,5 +1,4 @@
 
-import sqlite3
 from flask import Blueprint, request, jsonify
 from auth import token_required
 from db import get_db_connection, return_db_connection
@@ -47,7 +46,7 @@ def get_user_settings(current_user):
         }
         return jsonify(response)
 
-    except sqlite3.Error as e:
+    except Exception as e:
         return jsonify({'error': f'Database error: {str(e)}'}), 500
     finally:
         return_db_connection(conn)
@@ -81,12 +80,13 @@ def update_user_settings(current_user):
 
             query = f"UPDATE user_settings SET { ', '.join(fields_to_update)} WHERE user_id = %s"
             values.append(user_id)
-            conn.execute(query, tuple(values))
+            cursor.execute(query, tuple(values))
             conn.commit()
 
         return jsonify({"message": "Settings updated successfully"}), 200
 
-    except sqlite3.Error as e:
+    except Exception as e:
+        conn.rollback()
         return jsonify({'error': f'Database error: {str(e)}'}), 500
     finally:
         return_db_connection(conn)

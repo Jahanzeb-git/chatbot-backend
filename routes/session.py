@@ -1,10 +1,8 @@
 import logging
-import sqlite3
 from datetime import datetime, timezone, timedelta
 from flask import Blueprint, jsonify, current_app, request
 from auth import token_required
 from db import get_db_connection, return_db_connection
-
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -23,7 +21,7 @@ def new_chat_session(current_user):
             result = cursor.fetchone()
             new_session = (result[0] or 0) + 1
             cursor.execute(
-                """INSERT INTO conversation_memory (user_id, session_number, last_updated) VALUES (%s, %s, %s) ON CONFLICT (user_id, new_session) DO NOTHING""",
+                """INSERT INTO conversation_memory (user_id, session_number, last_updated) VALUES (%s, %s, %s) ON CONFLICT (user_id, session_number) DO NOTHING""",
                 (user_id, new_session, datetime.now(timezone.utc).isoformat())
             )
         return jsonify({'message': 'New session started', 'session_number': new_session})
@@ -76,7 +74,7 @@ def get_full_session_history(current_user, session_number):
             })
 
         return jsonify(history)
-    except sqlite3.Error as e:
+    except Exception as e:
         logging.error(f"Database error fetching session history: {e}", exc_info=True)
         return jsonify({'error': 'Could not retrieve session history'}), 500
     finally:
@@ -109,7 +107,7 @@ def get_session_history_summary(current_user):
         history_summary = cursor.fetchall()
         summary = [dict(row) for row in history_summary]
         return jsonify(summary)
-    except sqlite3.Error as e:
+    except Exception as e:
         logging.error(f"Database error fetching session history summary: {e}", exc_info=True)
         return jsonify({'error': 'Could not retrieve session history summary'}), 500
     finally:
@@ -126,7 +124,7 @@ def delete_user(current_user):
         conn.commit()
         logging.info(f"User {user_id} and all associated data deleted successfully.")
         return jsonify({'message': 'User account and all associated data deleted successfully'}), 200
-    except sqlite3.Error as e:
+    except Exception as e:
         logging.error(f"Database error during user deletion: {e}", exc_info=True)
         return jsonify({'message': f'Database error: {str(e)}'}), 500
     finally:

@@ -972,7 +972,14 @@ def chat(current_user):
                                    WHERE user_id = %s AND session_number = %s
                                    ORDER BY id DESC LIMIT 1""",
                                 (user_id, session_id)
-                            ).fetchone()['id']
+                            )
+                            result = cursor.fetchone()
+                            if not result: 
+                                logging.warning(f"No chat history found for user {user_id}, session {session_id}")
+                                return_db_connection(conn)
+                                continue
+
+                            last_chat_id = result['id']
 
                             for file_data in file_data_list:
                                 cursor = conn.cursor()
@@ -1006,7 +1013,13 @@ def chat(current_user):
                                    ORDER BY id DESC LIMIT 1""",
                                 (user_id, session_id)
                             ) 
-                            last_chat_id = cursor.fetchone()['id']
+                            result = cursor.fetchone()
+                            if not result:  # ADD THIS CHECK
+                                logging.warning(f"No chat history found for user {user_id}, session {session_id}")
+                                return_db_connection(conn)
+                                continue  
+
+                            last_chat_id = result['id']
 
                             for file_data in file_data_list:
                                 cursor.execute(
@@ -1039,7 +1052,13 @@ def chat(current_user):
                                    ORDER BY id DESC LIMIT 1""",
                                 (user_id, session_id)
                             )
-                            last_chat_id = cursor.fetchone()['id']
+                            result = cursor.fetchone()
+                            if not result: 
+                                logging.warning(f"No chat history found for user {user_id}, session {session_id}")
+                                return_db_connection(conn)
+                                continue
+
+                            last_chat_id = result['id']
 
                             for file_data in file_data_list:
                                 cursor.execute(

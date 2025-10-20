@@ -57,11 +57,6 @@ def create_app():
     app.register_blueprint(analytics_bp)
     app.register_blueprint(user_key_bp)
 
-
-
-    logging.info("Application factory setup complete.")
-    return app
-
     # ---- Render-specific: Keep-alive ping endpoint ----
     @app.route('/ping', methods=['GET'])
     def ping():
@@ -69,7 +64,7 @@ def create_app():
         Lightweight health check endpoint for Render's sleep prevention.
         Returns immediately without blocking other requests.
         """
-        return jsonify({"status": "ok", "message": "Service is alive"}), 200
+        return jsonify({"status": "ok", "message": "Yep, breathing... barely. Stop poking me."}), 200
 
     # ---- Cleanup on shutdown ----
     @app.teardown_appcontext
@@ -80,6 +75,10 @@ def create_app():
         import db
         db.close_connection_pool()
 
+    logging.info("Application factory setup complete.")
+    return app  # NOW return after defining routes
+
+
 # This part is for running locally with `python app.py`
-# For production (like PythonAnywhere), you would point your WSGI server to the `app` object.
+# For production, you would point your WSGI server to the `app` object.
 app = create_app()

@@ -1,9 +1,8 @@
-import sqlite3
 from flask import Blueprint, request, jsonify, current_app
 from werkzeug.security import generate_password_hash, check_password_hash
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
-
+from psycopg2 import IntegrityError
 from db import get_db_connection, return_db_connection
 from auth import create_access_token, get_user
 
@@ -25,7 +24,7 @@ def signup():
         cursor.execute("INSERT INTO users (username, email, password) VALUES (%s, %s, %s)",
                        (username, email, hashed_password))
         conn.commit()
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         return jsonify({'message': 'Email or username already registered'}), 400
     finally:
         return_db_connection(conn)
@@ -76,9 +75,9 @@ def google_login():
                 cursor = conn.cursor()
                 cursor().execute("INSERT INTO users (username, email, profile_picture) VALUES (%s, %s, %s)", (username, email, profile_picture))
                 conn.commit()
-            except sqlite3.IntegrityError as e:
-                if "UNIQUE constraint failed: users.username" in str(e):
-                    return jsonify({'message': 'Username Already exist please use manual approach to login'}), 409
+            except IntegrityError as e:
+                if "username" in str(e):
+                    return jsonify({'message': 'Username Already exist please login manually!'}), 409
                 else:
                     current_app.logger.error(f"IntegrityError when creating user {email}: {e}")
                     return jsonify({'message': 'Failed to create user due to database constraint violation.'}), 500
@@ -94,7 +93,7 @@ def google_login():
                 cursor = conn.cursor()
                 cursor.execute("UPDATE users SET profile_picture = %s WHERE id = %s ", (profile_picture, user['id']))
                 conn.commit()
-            except sqlite3.Error as e:
+            except Exception as e:
                 current_app.logger.error(f"Error updating profile picture for user {user['id']}: {e}")
             finally:
                 return_db_connection(conn)
