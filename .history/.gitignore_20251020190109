@@ -1,0 +1,13 @@
+.env
+*.db
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+flaskenv/
+*.log
+uploads/
+interrupt_flags/
+.DS_Store
