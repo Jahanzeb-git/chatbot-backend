@@ -19,7 +19,7 @@ def new_chat_session(current_user):
             cursor = conn.cursor()
             cursor.execute("SELECT MAX(session_number) FROM conversation_memory WHERE user_id = %s", (user_id,))
             result = cursor.fetchone()
-            new_session = (result['max_session'] or 0) + 1
+            new_session = (result['max_session'] if result and result['max_session'] is not None else 0) + 1
             cursor.execute(
                 """INSERT INTO conversation_memory (user_id, session_number, last_updated) VALUES (%s, %s, %s) ON CONFLICT (user_id, session_number) DO NOTHING""",
                 (user_id, new_session, datetime.now(timezone.utc).isoformat())
