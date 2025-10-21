@@ -51,7 +51,7 @@ def _find_user_id_by_email(email: str) -> Optional[int]:
     row = cur.fetchone()
     return_db_connection(conn)
     if row:
-        return int(row[0])
+        return int(row['id'])
     return None
 
 

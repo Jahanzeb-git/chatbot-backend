@@ -73,7 +73,7 @@ def google_login():
             conn = get_db_connection()
             try:
                 cursor = conn.cursor()
-                cursor().execute("INSERT INTO users (username, email, profile_picture) VALUES (%s, %s, %s)", (username, email, profile_picture))
+                cursor.execute("INSERT INTO users (username, email, profile_picture) VALUES (%s, %s, %s)", (username, email, profile_picture))
                 conn.commit()
             except IntegrityError as e:
                 if "username" in str(e):
