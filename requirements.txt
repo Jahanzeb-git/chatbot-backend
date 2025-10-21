@@ -10,6 +10,6 @@ requests==2.32.4
 tiktoken==0.5.1
 pydantic==2.11.7
 python-dotenv==1.1.1
-boto3==1.26.182
+boto3>=1.26.176,<1.28
 botocore==1.29.182
 gunicorn>=22.1
