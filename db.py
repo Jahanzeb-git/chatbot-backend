@@ -35,7 +35,11 @@ def get_db_connection():
     global connection_pool
     
     if connection_pool is None:
-        raise RuntimeError("Connection pool not initialized. Call init_connection_pool() first.")
+        try: 
+            from flask import current_app
+            init_connection_pool()
+        except Exception as e: 
+            raise RuntimeError(f"Failed to auto-initialize connection pool: {e}")
     
     try:
         conn = connection_pool.getconn()
