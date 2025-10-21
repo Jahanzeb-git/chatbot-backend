@@ -12,3 +12,8 @@ python-dotenv==1.1.1
 boto3 
 gunicorn>=22.1
 psycopg2-binary
+python-magic==0.4.27
+pypdf==5.9.0
+python-docx==1.1.2
+openpyxl==3.1.5
+
