@@ -60,7 +60,7 @@ def get_full_session_history(current_user, session_number):
 
             # Get files associated with this chat interaction
             cursor.execute(
-                """SELECT uf.id, uf.stored_name, uf.original_name, uf.size,
+                """SELECT uf.id, uf.b2_key AS stored_name, uf.original_name, uf.size,
                           uf.mime_type, uf.is_image, uf.uploaded_at
                    FROM uploaded_files uf
                    JOIN chat_files cf ON cf.file_id = uf.id
