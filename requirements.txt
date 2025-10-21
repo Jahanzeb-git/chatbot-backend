@@ -6,7 +6,7 @@ google-auth==2.40.3
 together==1.5.17
 tavily-python==0.7.12
 requests==2.32.4
-tiktoken==0.5.1
+tiktoken>=0.7.0
 pydantic==2.11.7
 python-dotenv==1.1.1
 boto3 

@@ -27,5 +27,3 @@ services:
         value: https://s3.us-west-004.backblazeb2.com
       - key: TOGETHER_KEY_ENC_KEY
         sync: false
-      - key: PYTHON_VERSION
-        value: 3.10.13
