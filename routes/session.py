@@ -5,6 +5,7 @@ from auth import token_required
 from db import get_db_connection, return_db_connection
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
+from psycopg2.extras import RealDictCursor
 
 
 session_bp = Blueprint('session_bp', __name__)
