@@ -61,27 +61,27 @@ def update_user_settings(current_user):
 
     conn = get_db_connection()
     try:    
-            cursor = conn.cursor()
-            # First, ensure a settings row exists for the user
-            cursor.execute("""INSERT INTO user_settings (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING""", (user_id,))
+        cursor = conn.cursor()
+        # First, ensure a settings row exists for the user
+        cursor.execute("""INSERT INTO user_settings (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING""", (user_id,))
 
-            # Dynamically build the update query
-            fields_to_update = []
-            values = []
-            valid_fields = ['temperature', 'top_p', 'what_we_call_you', 'theme', 'system_prompt']
+        # Dynamically build the update query
+        fields_to_update = []
+        values = []
+        valid_fields = ['temperature', 'top_p', 'what_we_call_you', 'theme', 'system_prompt']
 
-            for field in valid_fields:
-                if field in data:
-                    fields_to_update.append(f"{field} = %s")
-                    values.append(data[field])
+        for field in valid_fields:
+            if field in data:
+                fields_to_update.append(f"{field} = %s")
+                values.append(data[field])
 
-            if not fields_to_update:
-                return jsonify({"error": "No valid fields to update"}), 400
+        if not fields_to_update:
+            return jsonify({"error": "No valid fields to update"}), 400
 
-            query = f"UPDATE user_settings SET { ', '.join(fields_to_update)} WHERE user_id = %s"
-            values.append(user_id)
-            cursor.execute(query, tuple(values))
-            conn.commit()
+        query = f"UPDATE user_settings SET { ', '.join(fields_to_update)} WHERE user_id = %s"
+        values.append(user_id)
+        cursor.execute(query, tuple(values))
+        conn.commit()
 
         return jsonify({"message": "Settings updated successfully"}), 200
 
