@@ -616,6 +616,7 @@ def chat(current_user):
         # Check for staged files
         if hasattr(current_app, 'file_cache') and cache_key in current_app.file_cache:
             file_ids = current_app.file_cache.pop(cache_key)
+            logging.info(f"Found {len(file_ids)} staged files in cache for {cache_key}")
 
             conn = get_db_connection()
             try:
@@ -631,7 +632,7 @@ def chat(current_user):
                 # Helper function to download from B2
                 def download_from_b2(b2_key):
                     """Download file from B2 using presigned URL."""
-                    from file_routes import generate_presigned_url
+                    from routes.file_routes import generate_presigned_url
                     url = generate_presigned_url(b2_key, expiration=600)  # 10 minutes
                     if not url:
                         raise Exception(f"Failed to generate presigned URL for {b2_key}")
@@ -646,7 +647,15 @@ def chat(current_user):
                     try:
                         file_bytes = download_from_b2(b2_key)
                     except Exception as e:
-                        logging.error(f"Failed to download file from B2: {b2_key}, error: {e}")
+                        logging.error(f"Failed to download file from B2: {b2_key}, error: {e}", exc_info=True)
+                        file_data_list.append({
+                            'id': file_record['id'],
+                            'b2_key': b2_key,
+                            'original_name': file_record['original_name'],
+                            'size': file_record['size'],
+                            'mime_type': file_record['mime_type'],
+                            'content': f"[Error: Failed to load file {file_record['original_name']}]"
+                        })
                         continue
 
                     if file_record['is_image']:
@@ -656,6 +665,7 @@ def chat(current_user):
                         is_vision_request = True
                     else:
                         content = extract_file_content_from_bytes(file_bytes, file_record['mime_type'])
+                        logging.info(f"Extracted content from {file_record['original_name']}: {len(content)} characters")
                         file_data_list.append({
                             'id': file_record['id'],
                             'b2_key': b2_key,
