@@ -249,7 +249,7 @@ Continue your response now:"""
 
 def extract_file_content_from_bytes(file_bytes, mime_type):
     """Extract content from file bytes."""
-    from file_routes import extract_file_content_from_bytes as extract_func
+    from routes.file_routes import extract_file_content_from_bytes as extract_func
     return extract_func(file_bytes, mime_type)
 
 def extract_text_from_pdf(file_path):
@@ -754,13 +754,18 @@ def chat(current_user):
 
                 # Stream response
                 stream = client.chat.completions.create(**request_params)
-
+                import sys
                 for token_obj in stream:
                     if token_obj.choices:
                         delta = token_obj.choices[0].delta.content or ''
                         chunks.append(delta)
-                        yield f"data: {json.dumps({'token': delta, 'mode': reason})}\n\n".encode()
-
+                        data = f"data: {json.dumps({'token': delta, 'mode': reason})}\n\n".encode()
+                        yield data
+                        # force flush to prevent buffering...
+                        try: 
+                            sys.stdout.flush()
+                        except: 
+                            pass
                 partial_response = ''.join(chunks).strip()
 
                 if not partial_response:

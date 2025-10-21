@@ -67,7 +67,7 @@ def get_user_together_key_enc(user_id: int):
         cur = conn.cursor()
         cur.execute("SELECT together_api_key FROM user_settings WHERE user_id = %s", (user_id,))
         row = cur.fetchone()
-        return row[0] if row else None
+        return row['together_api_key'] if row else None
     finally:
         return_db_connection(conn)
 
