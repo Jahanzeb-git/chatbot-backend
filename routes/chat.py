@@ -976,7 +976,7 @@ def chat(current_user):
                             if not result: 
                                 logging.warning(f"No chat history found for user {user_id}, session {session_id}")
                                 return_db_connection(conn)
-                                continue
+                                return
 
                             last_chat_id = result['id']
 
@@ -1016,7 +1016,7 @@ def chat(current_user):
                             if not result:  # ADD THIS CHECK
                                 logging.warning(f"No chat history found for user {user_id}, session {session_id}")
                                 return_db_connection(conn)
-                                continue  
+                                return
 
                             last_chat_id = result['id']
 
@@ -1055,7 +1055,7 @@ def chat(current_user):
                             if not result: 
                                 logging.warning(f"No chat history found for user {user_id}, session {session_id}")
                                 return_db_connection(conn)
-                                continue
+                                return
 
                             last_chat_id = result['id']
 
