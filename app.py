@@ -1,3 +1,6 @@
+from gevent import monkey
+monkey.patch_all() # Patch standard libraries for non-blocking I/O to enable Gevent-based concurrency
+
 import logging
 from flask import Flask, jsonify
 from flask_cors import CORS
