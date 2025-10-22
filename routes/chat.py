@@ -1077,7 +1077,7 @@ def chat(current_user):
                                 return
 
                             last_chat_id = result['id']
-                            if file_data_list
+                            if file_data_list:
                                 for file_data in file_data_list:
                                     cursor.execute(
                                         "INSERT INTO chat_files (chat_history_id, file_id) VALUES (%s, %s)",
