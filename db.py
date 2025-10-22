@@ -192,6 +192,23 @@ def init_db():
             file_id INTEGER NOT NULL REFERENCES uploaded_files(id) ON DELETE CASCADE,
             PRIMARY KEY (chat_history_id, file_id)
         );
+
+        CREATE TABLE IF NOT EXISTS search_web_logs (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            session_number INTEGER NOT NULL,
+            chat_history_id INTEGER REFERENCES chat_history(id) ON DELETE CASCADE,
+            call_sequence INTEGER NOT NULL,
+            query TEXT NOT NULL,
+            urls_json TEXT NOT NULL,
+            timestamp TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_search_logs_chat 
+        ON search_web_logs (chat_history_id);
+
+        CREATE INDEX IF NOT EXISTS idx_search_logs_session 
+        ON search_web_logs (user_id, session_number);
         
         CREATE INDEX IF NOT EXISTS idx_uploaded_files_user 
         ON uploaded_files (user_id, session_number);

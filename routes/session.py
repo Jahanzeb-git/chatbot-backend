@@ -70,11 +70,35 @@ def get_full_session_history(current_user, session_number):
             )
             files = cursor.fetchall()
 
+            # Get search_web URLs for this chat interaction
+            cursor.execute(
+                """SELECT call_sequence, query, urls_json, timestamp
+                   FROM search_web_logs
+                   WHERE chat_history_id = %s
+                   ORDER BY call_sequence ASC""",
+                (chat_id,)
+            )
+            search_logs = cursor.fetchall()
+
+            # Parse search_web calls
+            search_web_calls = []
+            for log in search_logs:
+                try:
+                    search_web_calls.append({
+                        'sequence': log['call_sequence'],
+                        'query': log['query'],
+                        'urls': json.loads(log['urls_json']),
+                        'timestamp': log['timestamp']
+                    })
+                except (json.JSONDecodeError, TypeError) as e:
+                    logging.warning(f"Failed to parse search_web URLs for chat_id {chat_id}: {e}")
+
             history.append({
                 'prompt': row['original_prompt'] or row['prompt'],  # Use original if available
                 'response': row['response'],
                 'timestamp': row['timestamp'],
-                'files': [dict(f) for f in files] if files else []
+                'files': [dict(f) for f in files] if files else [],
+                'search_web_calls': search_web_calls  
             })
 
         return jsonify(history)
@@ -239,3 +263,40 @@ def get_shared_conversation(share_id):
         return jsonify({"error": "Could not retrieve conversation"}), 500
     finally:
         return_db_connection(conn)
+
+
+@session_bp.route('/search-web-urls/<int:session_number>', methods=['GET'])
+@token_required
+def get_search_web_urls(current_user, session_number):
+    """
+    Get search_web URLs during active generation (polling endpoint).
+    
+    This is for real-time polling while a response is being generated.
+    For historical data, use /history/<session_number> which includes URLs.
+    
+    Query params:
+        - active: Must be 'true' (this endpoint is for active polling only)
+    """
+    user_id = current_user['id']
+    is_active = request.args.get('active', '').lower() == 'true'
+    
+    if not is_active:
+        return jsonify({
+            'error': 'This endpoint is for active polling only. Use /history/<session_number> for historical data.'
+        }), 400
+    
+    # Check cache for active generation
+    cache_key = f"{user_id}-{session_number}"
+    if hasattr(current_app, 'search_web_cache') and cache_key in current_app.search_web_cache:
+        cached_calls = current_app.search_web_cache[cache_key]
+        return jsonify({
+            'active': True,
+            'calls': cached_calls,
+            'count': len(cached_calls)
+        }), 200
+    else:
+        return jsonify({
+            'active': True,
+            'calls': [],
+            'count': 0
+        }), 200

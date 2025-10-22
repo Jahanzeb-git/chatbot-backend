@@ -15,6 +15,7 @@ def create_app():
     # 0. Initialize a simple in-memory cache for interruption flags and file uploads
     app.interrupt_requests = {}
     app.file_cache = {}
+    app.search_web_cache = {}
 
     # 1. Load configuration from config.py
     app.config.from_pyfile('config.py', silent=False)

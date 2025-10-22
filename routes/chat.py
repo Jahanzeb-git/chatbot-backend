@@ -12,6 +12,7 @@ from routes.together_key_routes import decrypt_key
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import requests
+from datetime import datetime, timezone
 import os
 
 # Import tool execution
@@ -594,6 +595,55 @@ def extract_essential_search_results(tavily_response: Dict[str, Any]) -> Dict[st
 
     return essential
 
+def extract_urls_from_tavily_response(tavily_response: Dict[str, Any]) -> List[Dict[str, str]]:
+    """
+    Extract URLs from Tavily response.
+    Returns list of {url, title} objects.
+    """
+    urls = []
+    results = tavily_response.get('results', [])
+    
+    for result in results:
+        if 'url' in result:
+            urls.append({
+                'url': result['url'],
+                'title': result.get('title', 'Untitled')
+            })
+    
+    return urls
+
+def store_search_web_urls(user_id, session_id, chat_history_id, search_calls):
+    """
+    Store search_web URLs in database.
+    
+    Args:
+        user_id: User ID
+        session_id: Session number
+        chat_history_id: Chat history record ID
+        search_calls: List of {query, urls, timestamp} dicts
+    """
+    if not search_calls:
+        return
+    
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        for idx, call in enumerate(search_calls):
+            cursor.execute(
+                """INSERT INTO search_web_logs
+                   (user_id, session_number, chat_history_id, call_sequence, query, urls_json, timestamp)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (user_id, int(session_id), chat_history_id, idx, 
+                 call['query'], json.dumps(call['urls']), call['timestamp'])
+            )
+        conn.commit()
+        logging.info(f"Stored {len(search_calls)} search_web URL logs for chat_history_id {chat_history_id}")
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"Failed to store search_web URLs: {e}", exc_info=True)
+    finally:
+        return_db_connection(conn)
+
 
 @chat_bp.route('/chat', methods=['POST'])
 @optional_token_required
@@ -738,6 +788,8 @@ def chat(current_user):
         # For default mode, track cumulative response
         default_mode_full_response = ""
 
+        search_web_calls = []  # Track search_web executions: [{query, urls, timestamp}]
+
         try:
             # Main tool loop
             while tool_call_count < max_tool_calls:
@@ -808,6 +860,22 @@ def chat(current_user):
                                 execute_tool(tool_name, {'query': tool_query})
                             )
                             loop.close()
+                            # Track search_web URLs
+                            if tool_name == 'search_web' and tool_result.get('success'):
+                                urls = extract_urls_from_tavily_response(tool_result['result'])
+                                search_web_calls.append({
+                                    'query': tool_query,
+                                    'urls': urls,
+                                    'timestamp': datetime.now(timezone.utc).isoformat()
+                                })
+                                logging.info(f"Captured {len(urls)} URLs from search_web call #{len(search_web_calls)}")
+                                # After capturing URLs, add to cache
+                                if search_web_calls:
+                                    cache_key = f"{user_id}-{session_id}"
+                                    if not hasattr(current_app, 'search_web_cache'):
+                                        current_app.search_web_cache = {}
+                                    current_app.search_web_cache[cache_key] = search_web_calls
+
 
                             if not tool_result.get('success'):
                                 logging.error(f"Tool execution failed: {tool_result.get('error')}")
@@ -879,6 +947,21 @@ def chat(current_user):
                                 execute_tool(tool_name, {'query': tool_query})
                             )
                             loop.close()
+                            # Track search_web URLs
+                            if tool_name == 'search_web' and tool_result.get('success'):
+                                urls = extract_urls_from_tavily_response(tool_result['result'])
+                                search_web_calls.append({
+                                    'query': tool_query,
+                                    'urls': urls,
+                                    'timestamp': datetime.now(timezone.utc).isoformat()
+                                })
+                                logging.info(f"Captured {len(urls)} URLs from search_web call #{len(search_web_calls)}")
+                                # After capturing URLs, add to cache
+                                if search_web_calls:
+                                    cache_key = f"{user_id}-{session_id}"
+                                    if not hasattr(current_app, 'search_web_cache'):
+                                        current_app.search_web_cache = {}
+                                    current_app.search_web_cache[cache_key] = search_web_calls
 
                             logging.info(f"Tool result type: {type(tool_result)}")
                             logging.info(f"Tool result keys: {list(tool_result.keys()) if isinstance(tool_result, dict) else 'NOT A DICT'}")
@@ -996,6 +1079,7 @@ def chat(current_user):
                             last_chat_id = result['id']
 
                             for file_data in file_data_list:
+                                
                                 cursor = conn.cursor()
                                 cursor.execute(
                                     "INSERT INTO chat_files (chat_history_id, file_id) VALUES (%s, %s)",
@@ -1004,6 +1088,9 @@ def chat(current_user):
                             conn.commit()
                         finally:
                             return_db_connection(conn)
+                            # Store search_web URLs
+                        if search_web_calls:
+                            store_search_web_urls(user_id, session_id, last_chat_id, search_web_calls)
 
                     logging.info(f"Added code interaction with tool usage: {output_token_count} tokens")
 
@@ -1043,6 +1130,9 @@ def chat(current_user):
                             conn.commit()
                         finally:
                             return_db_connection(conn)
+                        # Store search_web URLs
+                        if search_web_calls:
+                            store_search_web_urls(user_id, session_id, last_chat_id, search_web_calls)
 
                     logging.info(f"Added reasoning interaction with tool usage: {cleaned_output_tokens} tokens")
 
@@ -1082,6 +1172,9 @@ def chat(current_user):
                             conn.commit()
                         finally:
                             return_db_connection(conn)
+                        # Store search_web URLs
+                        if search_web_calls:
+                            store_search_web_urls(user_id, session_id, last_chat_id, search_web_calls)
 
                     logging.info(f"Added default interaction with tool usage: {output_token_count} tokens")
 
@@ -1094,6 +1187,10 @@ def chat(current_user):
                 yield f"data: {json.dumps({'status': 'done', 'mode': reason})}\n\n".encode()
             else:
                 logging.info(f"Generation for session {session_id} did not complete normally.")
+            # Clear search_web cache
+            cache_key = f"{user_id}-{session_id}"
+            if hasattr(current_app, 'search_web_cache') and cache_key in current_app.search_web_cache:
+                del current_app.search_web_cache[cache_key]
 
             yield b"event: end-of-stream\ndata: {}\n\n"
 
