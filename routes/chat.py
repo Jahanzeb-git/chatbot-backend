@@ -1060,7 +1060,7 @@ def chat(current_user):
                     memory.add_interaction(memory_query, final_response, output_token_count, original_prompt=original_prompt)
 
                     # Link files to chat
-                    if current_user and file_data_list:
+                    if current_user:
                         conn = get_db_connection()
                         try:
                             cursor = conn.cursor()
@@ -1077,17 +1077,16 @@ def chat(current_user):
                                 return
 
                             last_chat_id = result['id']
-
-                            for file_data in file_data_list:
-                                
-                                cursor = conn.cursor()
-                                cursor.execute(
-                                    "INSERT INTO chat_files (chat_history_id, file_id) VALUES (%s, %s)",
-                                    (last_chat_id, file_data['id'])
-                                )
+                            if file_data_list
+                                for file_data in file_data_list:
+                                    cursor.execute(
+                                        "INSERT INTO chat_files (chat_history_id, file_id) VALUES (%s, %s)",
+                                        (last_chat_id, file_data['id'])
+                                    )
                             conn.commit()
                         finally:
                             return_db_connection(conn)
+
                             # Store search_web URLs
                         if search_web_calls:
                             store_search_web_urls(user_id, session_id, last_chat_id, search_web_calls)
@@ -1104,7 +1103,7 @@ def chat(current_user):
                                          original_prompt=original_prompt)
 
                     # Link files
-                    if current_user and file_data_list:
+                    if current_user:
                         conn = get_db_connection()
                         try:
                             cursor = conn.cursor()
@@ -1121,15 +1120,16 @@ def chat(current_user):
                                 return
 
                             last_chat_id = result['id']
-
-                            for file_data in file_data_list:
-                                cursor.execute(
-                                    "INSERT INTO chat_files (chat_history_id, file_id) VALUES (%s, %s)",
-                                    (last_chat_id, file_data['id'])
-                                )
+                            if file_data_list:
+                                for file_data in file_data_list:
+                                    cursor.execute(
+                                        "INSERT INTO chat_files (chat_history_id, file_id) VALUES (%s, %s)",
+                                        (last_chat_id, file_data['id'])
+                                    )
                             conn.commit()
                         finally:
                             return_db_connection(conn)
+
                         # Store search_web URLs
                         if search_web_calls:
                             store_search_web_urls(user_id, session_id, last_chat_id, search_web_calls)
@@ -1146,7 +1146,7 @@ def chat(current_user):
                     memory.add_interaction(memory_query, final_response, output_token_count, original_prompt=original_prompt)
 
                     # Link files
-                    if current_user and file_data_list:
+                    if current_user:
                         conn = get_db_connection()
                         try:
                             cursor = conn.cursor()
@@ -1163,15 +1163,16 @@ def chat(current_user):
                                 return
 
                             last_chat_id = result['id']
-
-                            for file_data in file_data_list:
-                                cursor.execute(
-                                    "INSERT INTO chat_files (chat_history_id, file_id) VALUES (%s, %s)",
-                                    (last_chat_id, file_data['id'])
-                                )
+                            if file_data_list:
+                                for file_data in file_data_list:
+                                    cursor.execute(
+                                        "INSERT INTO chat_files (chat_history_id, file_id) VALUES (%s, %s)",
+                                        (last_chat_id, file_data['id'])
+                                    )
                             conn.commit()
                         finally:
                             return_db_connection(conn)
+
                         # Store search_web URLs
                         if search_web_calls:
                             store_search_web_urls(user_id, session_id, last_chat_id, search_web_calls)
