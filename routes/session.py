@@ -9,6 +9,7 @@ from psycopg2.extras import RealDictCursor # realdictcursor.
 import json
 
 
+
 session_bp = Blueprint('session_bp', __name__)
 
 @session_bp.route('/session_inc', methods=['GET'])
@@ -153,7 +154,7 @@ def delete_user(current_user):
         logging.info(f"User {user_id} and all associated data deleted successfully.")
         return jsonify({'message': 'User account and all associated data deleted successfully'}), 200
     except Exception as e:
-        logging.error(f"Database error during user deletion: {e}", exc_info=True)
+        logging.error(f"Database error during user deletion!: {e}", exc_info=True)
         return jsonify({'message': f'Database error: {str(e)}'}), 500
     finally:
         return_db_connection(conn)
@@ -285,6 +286,7 @@ def get_search_web_urls(current_user, session_number):
             'error': 'This endpoint is for active polling only. Use /history/<session_number> for historical data.'
         }), 400
     
+    # check cache...
     # Check cache for active generation
     cache_key = f"{user_id}-{session_number}"
     if hasattr(current_app, 'search_web_cache') and cache_key in current_app.search_web_cache:
