@@ -2,7 +2,7 @@ from gevent import monkey
 monkey.patch_all() # Patch standard libraries for non-blocking I/O to enable Gevent-based concurrency
 
 import logging
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template_string
 from flask_cors import CORS
 from pathlib import Path
 from dotenv import load_dotenv
@@ -69,6 +69,125 @@ def create_app():
         Returns immediately without blocking other requests.
         """
         return jsonify({"status": "ok", "message": "Yep, breathing... barely. Stop poking me."}), 200
+
+    @app.route('/')
+    def home():
+        # Get all registered routes (except static)
+        routes = [
+            {
+                "endpoint": rule.endpoint,
+                "methods": ", ".join(sorted(rule.methods - {"HEAD", "OPTIONS"})),
+                "path": str(rule)
+            }
+            for rule in app.url_map.iter_rules()
+            if rule.endpoint != 'static'
+        ]
+
+        uptime = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+
+        html_template = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Backend Operational Status</title>
+        <style>
+            body {
+                font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
+                margin: 0;
+                padding: 0;
+            }
+            .container {
+                max-width: 800px;
+                margin: 60px auto;
+                background: #fff;
+                border-radius: 16px;
+                box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+                padding: 40px;
+                text-align: center;
+            }
+            h1 {
+                color: #007BFF;
+                font-size: 2rem;
+                margin-bottom: 10px;
+            }
+            p {
+                color: #555;
+                margin-bottom: 30px;
+            }
+            @keyframes pulse {
+                0% { box-shadow: 0 0 0 0 rgba(40,167,69,0.4); }
+                70% { box-shadow: 0 0 0 10px rgba(40,167,69,0); }
+                100% { box-shadow: 0 0 0 0 rgba(40,167,69,0); }
+            }
+            .status {
+                display: inline-block;
+                background: #28a745;
+                color: white;
+                padding: 6px 14px;
+                border-radius: 20px;
+                font-size: 0.9rem;
+                font-weight: bold;
+                animation: pulse 2s infinite;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+            }
+            th, td {
+                border: 1px solid #eee;
+                padding: 12px;
+                text-align: left;
+            }
+            th {
+                background: #007BFF;
+                color: white;
+            }
+            tr:nth-child(even) {
+                background: #f9f9f9;
+            }
+            .footer {
+                margin-top: 30px;
+                font-size: 0.9rem;
+                color: #777;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Chatbot Backend</h1>
+            <p><span class="status">✅ All Systems Operational</span></p>
+            <p>Deployed on <strong>Render (Free Tier)</strong></p>
+            <p><em>Last checked:</em> {{ uptime }}</p>
+
+            <h2>Registered Endpoints</h2>
+            <table>
+                <tr>
+                    <th>Endpoint</th>
+                    <th>Path</th>
+                    <th>Methods</th>
+                </tr>
+                {% for route in routes %}
+                <tr>
+                    <td>{{ route.endpoint }}</td>
+                    <td>{{ route.path }}</td>
+                    <td>{{ route.methods }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+
+            <div class="footer">
+                © {{ year }} Chatbot Backend • Flask Monitoring Page
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+        return render_template_string(html_template, routes=routes, uptime=uptime, year=datetime.datetime.utcnow().year)
 
     # ---- Cleanup on shutdown ----
     @app.teardown_appcontext
