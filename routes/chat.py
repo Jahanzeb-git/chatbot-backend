@@ -556,14 +556,12 @@ def merge_json_responses(responses: List[Dict[str, Any]]) -> Dict[str, Any]:
                     for file_obj in value:
                         if file_obj is not None:
                             # Remove tool fields before merging
-                            clean_file = {k: v for k, v in file_obj.items()
-                                        if k not in ['tool_before_file', 'tool_after_file'] and v is not None}
+                            clean_file = {k: v for k, v in file_obj.items() if v is not None}
                             if clean_file:
                                 merged['Files'].append(clean_file)
                 else:
-                    # For non-Files fields, keep if not a tool field
-                    if not key.startswith('tool_'):
-                        merged[key] = value
+                    # Keep ALL fields including tool fields for history
+                    merged[key] = value
 
     return merged
 
