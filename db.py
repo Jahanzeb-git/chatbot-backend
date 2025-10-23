@@ -209,6 +209,17 @@ def init_db():
 
         CREATE INDEX IF NOT EXISTS idx_search_logs_session 
         ON search_web_logs (user_id, session_number);
+
+        CREATE TABLE IF NOT EXISTS search_web_realtime_cache (
+            user_id INTEGER NOT NULL,
+            session_number INTEGER NOT NULL,
+            calls_json TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, session_number)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_search_realtime_cache 
+        ON search_web_realtime_cache (user_id, session_number, updated_at);
         
         CREATE INDEX IF NOT EXISTS idx_uploaded_files_user 
         ON uploaded_files (user_id, session_number);

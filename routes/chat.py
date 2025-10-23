@@ -867,13 +867,25 @@ def chat(current_user):
                                     'timestamp': datetime.now(timezone.utc).isoformat()
                                 })
                                 logging.info(f"Captured {len(urls)} URLs from search_web call #{len(search_web_calls)}")
-                                # After capturing URLs, add to cache
+                                # After capturing URLs, add to database cache for cross-worker access
                                 if search_web_calls:
-                                    cache_key = f"{user_id}-{session_id}"
-                                    if not hasattr(current_app, 'search_web_cache'):
-                                        current_app.search_web_cache = {}
-                                    current_app.search_web_cache[cache_key] = search_web_calls
-
+                                    try:
+                                        conn = get_db_connection()
+                                        cursor = conn.cursor()
+                                        cursor.execute(
+                                            """INSERT INTO search_web_realtime_cache (user_id, session_number, calls_json, updated_at)
+                                                VALUES (%s, %s, %s, NOW())
+                                                ON CONFLICT (user_id, session_number) 
+                                                DO UPDATE SET calls_json = EXCLUDED.calls_json, updated_at = NOW()""",
+                                            (user_id, int(session_id), json.dumps(search_web_calls))
+                                        )   
+                                        conn.commit()
+                                        logging.info(f"Updated realtime cache for session {session_id} with {len(search_web_calls)} calls")
+                                        return_db_connection(conn)
+                                    except Exception as e:
+                                        logging.error(f"Failed to update realtime cache: {e}", exc_info=True)
+                                        if conn:
+                                            return_db_connection(conn)
 
                             if not tool_result.get('success'):
                                 logging.error(f"Tool execution failed: {tool_result.get('error')}")
@@ -954,12 +966,25 @@ def chat(current_user):
                                     'timestamp': datetime.now(timezone.utc).isoformat()
                                 })
                                 logging.info(f"Captured {len(urls)} URLs from search_web call #{len(search_web_calls)}")
-                                # After capturing URLs, add to cache
+                                # After capturing URLs, add to database cache for cross-worker access
                                 if search_web_calls:
-                                    cache_key = f"{user_id}-{session_id}"
-                                    if not hasattr(current_app, 'search_web_cache'):
-                                        current_app.search_web_cache = {}
-                                    current_app.search_web_cache[cache_key] = search_web_calls
+                                    try:
+                                        conn = get_db_connection()
+                                        cursor = conn.cursor()
+                                        cursor.execute(
+                                            """INSERT INTO search_web_realtime_cache (user_id, session_number, calls_json, updated_at)
+                                                VALUES (%s, %s, %s, NOW())
+                                                ON CONFLICT (user_id, session_number) 
+                                                DO UPDATE SET calls_json = EXCLUDED.calls_json, updated_at = NOW()""",
+                                            (user_id, int(session_id), json.dumps(search_web_calls))
+                                        )
+                                        conn.commit()
+                                        logging.info(f"Updated realtime cache for session {session_id} with {len(search_web_calls)} calls")
+                                        return_db_connection(conn)
+                                    except Exception as e:
+                                        logging.error(f"Failed to update realtime cache: {e}", exc_info=True)
+                                        if conn:
+                                            return_db_connection(conn)
 
                             logging.info(f"Tool result type: {type(tool_result)}")
                             logging.info(f"Tool result keys: {list(tool_result.keys()) if isinstance(tool_result, dict) else 'NOT A DICT'}")
@@ -1186,11 +1211,21 @@ def chat(current_user):
                 yield f"data: {json.dumps({'status': 'done', 'mode': reason})}\n\n".encode()
             else:
                 logging.info(f"Generation for session {session_id} did not complete normally.")
-            # Clear search_web cache
-            cache_key = f"{user_id}-{session_id}"
-            if hasattr(current_app, 'search_web_cache') and cache_key in current_app.search_web_cache:
-                del current_app.search_web_cache[cache_key]
-
+            # Clear search_web realtime cache from database
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute(
+                    "DELETE FROM search_web_realtime_cache WHERE user_id = %s AND session_number = %s",
+                    (user_id, int(session_id))
+                )
+                conn.commit()
+                logging.info(f"Cleared realtime cache for session {session_id}")
+                return_db_connection(conn)
+            except Exception as e:
+                logging.error(f"Failed to clear realtime cache: {e}", exc_info=True)
+                if conn:
+                    return_db_connection(conn)
             yield b"event: end-of-stream\ndata: {}\n\n"
 
     headers = {

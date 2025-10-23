@@ -272,8 +272,7 @@ def get_search_web_urls(current_user, session_number):
     """
     Get search_web URLs during active generation (polling endpoint).
     
-    This is for real-time polling while a response is being generated.
-    For historical data, use /history/<session_number> which includes URLs.
+    Uses database cache to ensure cross-worker consistency.
     
     Query params:
         - active: Must be 'true' (this endpoint is for active polling only)
@@ -286,19 +285,45 @@ def get_search_web_urls(current_user, session_number):
             'error': 'This endpoint is for active polling only. Use /history/<session_number> for historical data.'
         }), 400
     
-    # check cache...
-    # Check cache for active generation
-    cache_key = f"{user_id}-{session_number}"
-    if hasattr(current_app, 'search_web_cache') and cache_key in current_app.search_web_cache:
-        cached_calls = current_app.search_web_cache[cache_key]
-        return jsonify({
-            'active': True,
-            'calls': cached_calls,
-            'count': len(cached_calls)
-        }), 200
-    else:
+    # Check database cache for active generation (works across workers)
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT calls_json, updated_at FROM search_web_realtime_cache 
+               WHERE user_id = %s AND session_number = %s""",
+            (user_id, session_number)
+        )
+        result = cursor.fetchone()
+        
+        if result:
+            try:
+                calls = json.loads(result['calls_json'])
+                return jsonify({
+                    'active': True,
+                    'calls': calls,
+                    'count': len(calls)
+                }), 200
+            except json.JSONDecodeError:
+                logging.error(f"Failed to decode calls_json for session {session_number}")
+                return jsonify({
+                    'active': True,
+                    'calls': [],
+                    'count': 0
+                }), 200
+        else:
+            return jsonify({
+                'active': True,
+                'calls': [],
+                'count': 0
+            }), 200
+    except Exception as e:
+        logging.error(f"Error fetching realtime cache: {e}", exc_info=True)
         return jsonify({
             'active': True,
             'calls': [],
-            'count': 0
+            'count': 0,
+            'error': str(e)
         }), 200
+    finally:
+        return_db_connection(conn)
