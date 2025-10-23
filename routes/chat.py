@@ -22,6 +22,9 @@ chat_bp = Blueprint('chat_bp', __name__)
 
 THINK_TAG_REGEX = re.compile(r'<think>.*?</think>', re.DOTALL)
 
+def current_date():
+    return datetime.now(timezone.utc).astimezone().strftime("%A, %B %d, %Y")
+
 BASE_SYSTEM_PROMPT = """
 # Core Instructions (DO NOT OVERRIDE)
 You are Deepthinks, a context-aware AI assistant.
@@ -73,6 +76,8 @@ When you need current information or real-time data during your response:
 - Prompt the user to enable Deepcode by toggling the Deepcode switch in the app.
 - When Deepcode is enabled, memory will automatically switch to JSON format (this indicates the mode change, when you see JSON response in conversation history that's mean user just used code mode and now it's turned off. Note: Do NOT repeat the same JSON structure as now the deepcode mode is turned off.).
 
+# current date. 
+Current Date is {today}
 # User Information
 The user's preferred name is: {user_name}
 
@@ -162,6 +167,7 @@ Note: Note that when you got tool output you'll see previous fields which you mu
 13. **File Versioning**: (Important) If you are generating a new file, set the 'FileVersion' to "1". If you are editing a previously generated file, you MUST increment its 'FileVersion' by one.
 14. **No Assumptions**: Do not make assumptions about technical requirements - ask for clarification when needed with pause.
 
+Current Date is {today}
 # User Information
 The user's preferred name is: {user_name}
 """
@@ -763,12 +769,14 @@ def chat(current_user):
         elif reason == "reason":
             model_name = current_app.config['REASON_LLM']
             final_system_prompt = BASE_SYSTEM_PROMPT.format(
+                today=current_date(),
                 user_name=chat_settings['what_we_call_you'],
                 user_persona=chat_settings['system_prompt']
             )
         else:
             model_name = current_app.config['DEFAULT_LLM']
             final_system_prompt = BASE_SYSTEM_PROMPT.format(
+                today=current_date(),
                 user_name=chat_settings['what_we_call_you'],
                 user_persona=chat_settings['system_prompt']
             )
