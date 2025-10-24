@@ -765,7 +765,7 @@ def chat(current_user):
 
         if reason == "code":
             model_name = current_app.config['CODE_LLM']
-            final_system_prompt = CODE_SYSTEM_PROMPT_TEMPLATE.format(user_name=chat_settings['what_we_call_you'])
+            final_system_prompt = CODE_SYSTEM_PROMPT_TEMPLATE.format(today=current_date(), user_name=chat_settings['what_we_call_you'])
         elif reason == "reason":
             model_name = current_app.config['REASON_LLM']
             final_system_prompt = BASE_SYSTEM_PROMPT.format(
