@@ -25,7 +25,7 @@ THINK_TAG_REGEX = re.compile(r'<think>.*?</think>', re.DOTALL)
 def current_date():
     return datetime.now(timezone.utc).astimezone().strftime("%A, %B %d, %Y")
 
-BASE_SYSTEM_PROMPT = f"""
+BASE_SYSTEM_PROMPT = """
 # Core Instructions (DO NOT OVERRIDE)
 You are Deepthinks, a context-aware AI assistant.
 Your primary goal is to provide accurate, relevant, and coherent responses by effectively utilizing the memory system and tools described below.
@@ -99,7 +99,7 @@ The user's preferred name is: {user_name}
 """
 
 # Code mode system prompt with tool support
-CODE_SYSTEM_PROMPT_TEMPLATE = f"""
+CODE_SYSTEM_PROMPT_TEMPLATE = """
 # Core Instructions (DO NOT OVERRIDE)
 You are Deepthinks, a context-aware AI assistant.
 
