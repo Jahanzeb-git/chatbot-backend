@@ -304,6 +304,21 @@ CRITICAL INSTRUCTIONS:
 6. To use a next tool just end your text on tool calling JSON as {{"tool_call": "search_web", "query": "..."}}. CRITICAL: Your tool calling JSON Must be exactly formatted otherwise it cause huge breakdown.
 7. Continue writing naturally from where you stopped until the ENTIRE original request is satisfied
 
+**CITATION INSTRUCTIONS:**
+When using information from the search results, cite your sources inline using the format `[cite:N]`, where `N` is the 1-based index from the results array (e.g., the first result is `[cite:1]`, second is `[cite:2]`, third is `[cite:3]`).
+
+**Citation Examples:**
+- Single source: "React 19 introduces the new `use` hook for async components [cite:1]."
+- Multiple sources: "Studies show AI productivity gains of 40-60% [cite:1,2]."
+- Per-sentence: "OpenAI released GPT-5 in March 2025 [cite:1]. It features improved reasoning [cite:2]."
+
+**Citation Rules:**
+- Only cite results actually provided in the TOOL RESULTS above
+- Use the `index` field from each result object
+- Place citations at the end of the claim or sentence
+- Do NOT invent citation numbers
+- If information comes from multiple results, use comma-separated indices: `[cite:1,3]`
+
 Continue now:"""
 
 # Code mode continuation prompt
@@ -342,6 +357,21 @@ Choose appropriate field based on where you are in the response:
 - Need info for conclusion? → `tool_before_conclusion`
 
 **Default: Complete the response with existing context and tool results.**
+
+**CITATION INSTRUCTIONS FOR CODE MODE:**
+When using information from search results in your Text, FileText, or Conclusion fields, cite your sources inline using the format `[cite:N]`, where `N` is the 1-based index from the results array.
+
+**Citation Examples:**
+- In Text field: "I'll implement authentication using OWASP 2025 best practices [cite:1]."
+- In FileText field: "This component uses React 19's new Server Actions API [cite:2]."
+- In Conclusion field: "The implementation follows the latest security guidelines [cite:1,3]."
+
+**Citation Rules:**
+- Only cite results actually provided in TOOL RESULTS
+- Use the `index` field from each result object
+- Place citations naturally at the end of claims
+- Do NOT invent citation numbers
+- Citations work in Text, FileText, and Conclusion fields (not in FileCode)
 
 Continue your JSON response:"""
 
@@ -671,7 +701,7 @@ def merge_json_responses(responses: List[Dict[str, Any]]) -> Dict[str, Any]:
 def extract_essential_search_results(tavily_response: Dict[str, Any]) -> Dict[str, Any]:
     """
     Extract only the essential information from Tavily response for LLM context.
-    Reduces token usage by 70-80%.
+    Includes citation indices for source attribution.
     """
     essential = {}
 
@@ -683,29 +713,31 @@ def extract_essential_search_results(tavily_response: Dict[str, Any]) -> Dict[st
     if tavily_response.get('answer'):
         essential['answer'] = tavily_response['answer']
 
-    # Include only top 3 results with essential fields only
+    # Include top 3 results with citation indices
     if 'results' in tavily_response and tavily_response['results']:
         essential['results'] = []
-        for result in tavily_response['results'][:3]:  # Only top 3
+        for idx, result in enumerate(tavily_response['results'][:3], start=1):  # 1-based indexing
             essential['results'].append({
+                'index': idx,  # ← NEW: Citation index
                 'title': result.get('title', ''),
-                'content': result.get('content', '')[:300]  # Limit content to 300 chars
-                # Removed: url, score, raw_content, etc.
+                'url': result.get('url', ''),
+                'content': result.get('content', '')[:1000]  # Limit to 1000 chars
             })
 
     return essential
 
 def extract_urls_from_tavily_response(tavily_response: Dict[str, Any]) -> List[Dict[str, str]]:
     """
-    Extract URLs from Tavily response.
-    Returns list of {url, title} objects.
+    Extract URLs from Tavily response with citation indices.
+    Returns list of {index, url, title} objects.
     """
     urls = []
     results = tavily_response.get('results', [])
     
-    for result in results:
+    for idx, result in enumerate(results, start=1):  # 1-based to match LLM citations
         if 'url' in result:
             urls.append({
+                'index': idx,  # ← Citation index
                 'url': result['url'],
                 'title': result.get('title', 'Untitled')
             })
