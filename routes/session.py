@@ -160,6 +160,169 @@ def delete_user(current_user):
         return_db_connection(conn)
 
 
+@session_bp.route('/session/<int:session_number>', methods=['DELETE'])
+@token_required
+def delete_session(current_user, session_number):
+    """
+    Delete a single chat session and all associated data.
+    Deletes: conversation_memory, chat_history, uploaded files (from B2 and DB)
+    """
+    user_id = current_user['id']
+    conn = get_db_connection()
+    
+    try:
+        cursor = conn.cursor()
+        
+        # 1. Get all files associated with this session to delete from B2
+        cursor.execute(
+            """SELECT b2_key FROM uploaded_files 
+               WHERE user_id = %s AND session_number = %s""",
+            (user_id, session_number)
+        )
+        files_to_delete = cursor.fetchall()
+        
+        # 2. Delete files from B2
+        if files_to_delete:
+            try:
+                from routes.file_routes import get_b2_client
+                from flask import current_app
+                
+                s3_client = get_b2_client()
+                for file_record in files_to_delete:
+                    try:
+                        s3_client.delete_object(
+                            Bucket=current_app.config['B2_BUCKET_NAME'],
+                            Key=file_record['b2_key']
+                        )
+                        logging.info(f"Deleted file from B2: {file_record['b2_key']}")
+                    except Exception as e:
+                        logging.warning(f"Failed to delete B2 file {file_record['b2_key']}: {e}")
+            except Exception as e:
+                logging.error(f"B2 cleanup error for session {session_number}: {e}", exc_info=True)
+        
+        # 3. Delete from database (CASCADE will handle chat_files, search_web_logs automatically)
+        # Delete uploaded_files (will cascade to chat_files)
+        cursor.execute(
+            "DELETE FROM uploaded_files WHERE user_id = %s AND session_number = %s",
+            (user_id, session_number)
+        )
+        
+        # Delete chat_history (will cascade to search_web_logs)
+        cursor.execute(
+            "DELETE FROM chat_history WHERE user_id = %s AND session_number = %s",
+            (user_id, session_number)
+        )
+        
+        # Delete conversation_memory
+        cursor.execute(
+            "DELETE FROM conversation_memory WHERE user_id = %s AND session_number = %s",
+            (user_id, session_number)
+        )
+        
+        # Delete search_web_realtime_cache
+        cursor.execute(
+            "DELETE FROM search_web_realtime_cache WHERE user_id = %s AND session_number = %s",
+            (user_id, session_number)
+        )
+        
+        conn.commit()
+        
+        deleted_files = len(files_to_delete)
+        logging.info(f"Deleted session {session_number} for user {user_id}. Files: {deleted_files}")
+        
+        return jsonify({
+            'message': f'Session {session_number} deleted successfully',
+            'deleted_files': deleted_files
+        }), 200
+        
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"Error deleting session {session_number}: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to delete session'}), 500
+    finally:
+        return_db_connection(conn)
+
+
+@session_bp.route('/sessions/all', methods=['DELETE'])
+@token_required
+def delete_all_sessions(current_user):
+    """
+    Delete ALL chat sessions for the user (but keep the account).
+    Deletes: all conversation_memory, chat_history, uploaded files from B2 and DB
+    """
+    user_id = current_user['id']
+    conn = get_db_connection()
+    
+    try:
+        cursor = conn.cursor()
+        
+        # 1. Get all files for this user to delete from B2
+        cursor.execute(
+            "SELECT b2_key FROM uploaded_files WHERE user_id = %s",
+            (user_id,)
+        )
+        files_to_delete = cursor.fetchall()
+        
+        # 2. Delete files from B2
+        deleted_file_count = 0
+        if files_to_delete:
+            try:
+                from routes.file_routes import get_b2_client
+                from flask import current_app
+                
+                s3_client = get_b2_client()
+                for file_record in files_to_delete:
+                    try:
+                        s3_client.delete_object(
+                            Bucket=current_app.config['B2_BUCKET_NAME'],
+                            Key=file_record['b2_key']
+                        )
+                        deleted_file_count += 1
+                        logging.info(f"Deleted file from B2: {file_record['b2_key']}")
+                    except Exception as e:
+                        logging.warning(f"Failed to delete B2 file {file_record['b2_key']}: {e}")
+            except Exception as e:
+                logging.error(f"B2 cleanup error for user {user_id}: {e}", exc_info=True)
+        
+        # 3. Delete all data from database
+        # Get session count before deletion
+        cursor.execute(
+            "SELECT COUNT(DISTINCT session_number) as count FROM chat_history WHERE user_id = %s",
+            (user_id,)
+        )
+        session_count_result = cursor.fetchone()
+        session_count = session_count_result['count'] if session_count_result else 0
+        
+        # Delete uploaded_files (will cascade to chat_files)
+        cursor.execute("DELETE FROM uploaded_files WHERE user_id = %s", (user_id,))
+        
+        # Delete chat_history (will cascade to search_web_logs)
+        cursor.execute("DELETE FROM chat_history WHERE user_id = %s", (user_id,))
+        
+        # Delete conversation_memory
+        cursor.execute("DELETE FROM conversation_memory WHERE user_id = %s", (user_id,))
+        
+        # Delete search_web_realtime_cache
+        cursor.execute("DELETE FROM search_web_realtime_cache WHERE user_id = %s", (user_id,))
+        
+        conn.commit()
+        
+        logging.info(f"Deleted all sessions for user {user_id}. Sessions: {session_count}, Files: {deleted_file_count}")
+        
+        return jsonify({
+            'message': 'All chat sessions deleted successfully',
+            'deleted_sessions': session_count,
+            'deleted_files': deleted_file_count
+        }), 200
+        
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"Error deleting all sessions for user {user_id}: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to delete all sessions'}), 500
+    finally:
+        return_db_connection(conn)
+
+
 #----------------------------------------------------------------
 # Conversation Sharing
 #----------------------------------------------------------------

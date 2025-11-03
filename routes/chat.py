@@ -302,22 +302,7 @@ CRITICAL INSTRUCTIONS:
 4. If the original request has multiple parts/steps, make sure to address ALL of them
 5. You can call additional tools if needed to fully complete the original request
 6. To use a next tool just end your text on tool calling JSON as {{"tool_call": "search_web", "query": "..."}}. CRITICAL: Your tool calling JSON Must be exactly formatted otherwise it cause huge breakdown.
-7. Continue writing naturally from where you stopped until the ENTIRE original request is satisfied
-
-**CITATION INSTRUCTIONS:**
-When using information from the search results, cite your sources inline using the format `[cite:N]`, where `N` is the 1-based index from the results array (e.g., the first result is `[cite:1]`, second is `[cite:2]`, third is `[cite:3]`).
-
-**Citation Examples:**
-- Single source: "React 19 introduces the new `use` hook for async components [cite:1]."
-- Multiple sources: "Studies show AI productivity gains of 40-60% [cite:1,2]."
-- Per-sentence: "OpenAI released GPT-5 in March 2025 [cite:1]. It features improved reasoning [cite:2]."
-
-**Citation Rules:**
-- Only cite results actually provided in the TOOL RESULTS above
-- Use the `index` field from each result object
-- Place citations at the end of the claim or sentence
-- Do NOT invent citation numbers
-- If information comes from multiple results, use comma-separated indices: `[cite:1,3]`
+7. Continue writing naturally from where you stopped until the ENTIRE original request is satisfied.
 
 Continue now:"""
 
@@ -357,21 +342,6 @@ Choose appropriate field based on where you are in the response:
 - Need info for conclusion? → `tool_before_conclusion`
 
 **Default: Complete the response with existing context and tool results.**
-
-**CITATION INSTRUCTIONS FOR CODE MODE:**
-When using information from search results in your Text, FileText, or Conclusion fields, cite your sources inline using the format `[cite:N]`, where `N` is the 1-based index from the results array.
-
-**Citation Examples:**
-- In Text field: "I'll implement authentication using OWASP 2025 best practices [cite:1]."
-- In FileText field: "This component uses React 19's new Server Actions API [cite:2]."
-- In Conclusion field: "The implementation follows the latest security guidelines [cite:1,3]."
-
-**Citation Rules:**
-- Only cite results actually provided in TOOL RESULTS
-- Use the `index` field from each result object
-- Place citations naturally at the end of claims
-- Do NOT invent citation numbers
-- Citations work in Text, FileText, and Conclusion fields (not in FileCode)
 
 Continue your JSON response:"""
 
