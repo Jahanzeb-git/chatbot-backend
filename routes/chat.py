@@ -499,6 +499,47 @@ def count_message_tokens(messages, model_name):
         total_text = ' '.join([str(msg.get('content', '')) for msg in messages])
         return max(10, len(total_text) // 4)
 
+def get_or_create_anonymous_user(session_id):
+    """
+    Get or create an anonymous user record in the database for unauthenticated sessions.
+    Returns the anonymous user's ID or None if rate limit is exceeded.
+    """
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        
+        # Check if we already have an anonymous user for this session_id
+        # We'll create a special email pattern for anonymous users
+        anonymous_email = f"anonymous_{session_id}@anonymous.local"
+        
+        # Try to get existing anonymous user
+        cursor.execute(
+            "SELECT id FROM users WHERE email = %s",
+            (anonymous_email,)
+        )
+        result = cursor.fetchone()
+        
+        if result:
+            return result['id']
+        
+        # Create a new anonymous user
+        cursor.execute(
+            "INSERT INTO users (email, username, password) VALUES (%s, %s, %s) RETURNING id",
+            (anonymous_email, f"Anonymous_{session_id[:8]}", None)
+        )
+        new_user = cursor.fetchone()
+        
+        if new_user:
+            return new_user['id']
+        else:
+            return None
+            
+    except Exception as e:
+        logging.error(f"Error creating anonymous user: {e}", exc_info=True)
+        return None
+    finally:
+        return_db_connection(conn)
+
 def get_user_chat_settings(user_id):
     conn = get_db_connection()
     try:
@@ -833,11 +874,15 @@ def chat(current_user):
         chat_settings = get_user_chat_settings(user_id)
         api_key = chat_settings.get('together_api_key') or current_app.config['TOGETHER_API_KEY']
     else:
-        user_id = session_id
-        request_count = get_unauthorized_request_count(user_id)
-        if request_count >= 2:
-            return jsonify({"error": "You have Hit the Limit Please Sign in to Continue!"}), 429
-        increment_unauthorized_request_count(user_id)
+        # Create or get an anonymous user for unauthenticated sessions
+        user_id = get_or_create_anonymous_user(session_id)
+        if user_id is None:
+            return jsonify({"error": "Please login to continue conversation."}), 429
+            
+        request_count = get_unauthorized_request_count(session_id)
+        if request_count >= 5:  # Allow 5 requests before requiring login
+            return jsonify({"error": "Please login to continue conversation."}), 429
+        increment_unauthorized_request_count(session_id)
         reason = "default"
         chat_settings = {"temperature": 0.7, "top_p": 1.0, "system_prompt": "You are a helpful assistant.", "what_we_call_you": "User"}
         api_key = current_app.config['TOGETHER_API_KEY']
