@@ -412,15 +412,64 @@ def get_shared_conversation(share_id):
         user_id = row['user_id']
         session_number = row['session_number']
 
+        # Get chat history with file information (same as in get_full_session_history)
         cursor.execute(
-            """SELECT prompt, response, timestamp FROM chat_history WHERE user_id = %s AND session_number = %s ORDER BY timestamp ASC""",
+            """SELECT ch.id, ch.original_prompt, ch.prompt, ch.response, ch.timestamp
+               FROM chat_history ch
+               WHERE ch.user_id = %s AND ch.session_number = %s
+               ORDER BY ch.timestamp ASC""",
             (user_id, session_number)
         )
         history_rows = cursor.fetchall()
         if not history_rows:
             return jsonify({'message': 'Chat session not found or is empty'}), 404
 
-        history = [dict(r) for r in history_rows]
+        history = []
+        for row in history_rows:
+            chat_id = row['id']
+
+            # Get files associated with this chat interaction
+            cursor.execute(
+                """SELECT uf.id, uf.b2_key AS stored_name, uf.original_name, uf.size,
+                          uf.mime_type, uf.is_image, uf.uploaded_at
+                   FROM uploaded_files uf
+                   JOIN chat_files cf ON cf.file_id = uf.id
+                   WHERE cf.chat_history_id = %s""",
+                (chat_id,)
+            )
+            files = cursor.fetchall()
+
+            # Get search_web URLs for this chat interaction
+            cursor.execute(
+                """SELECT call_sequence, query, urls_json, timestamp
+                   FROM search_web_logs
+                   WHERE chat_history_id = %s
+                   ORDER BY call_sequence ASC""",
+                (chat_id,)
+            )
+            search_logs = cursor.fetchall()
+
+            # Parse search_web calls
+            search_web_calls = []
+            for log in search_logs:
+                try:
+                    search_web_calls.append({
+                        'sequence': log['call_sequence'],
+                        'query': log['query'],
+                        'urls': json.loads(log['urls_json']),
+                        'timestamp': log['timestamp']
+                    })
+                except (json.JSONDecodeError, TypeError) as e:
+                    logging.warning(f"Failed to parse search_web URLs for chat_id {chat_id}: {e}")
+
+            history.append({
+                'prompt': row['original_prompt'] or row['prompt'],  # Use original if available
+                'response': row['response'],
+                'timestamp': row['timestamp'],
+                'files': [dict(f) for f in files] if files else [],
+                'search_web_calls': search_web_calls  
+            })
+
         return jsonify(history)
     except Exception as e:
         current_app.logger.exception("Error fetching shared conversation")
