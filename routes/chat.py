@@ -6,6 +6,14 @@ import asyncio
 from flask import Blueprint, request, jsonify, Response, stream_with_context, current_app
 from together import Together
 from auth import optional_token_required
+import json
+import logging
+import re
+import tiktoken
+import asyncio
+from flask import Blueprint, request, jsonify, Response, stream_with_context, current_app
+from together import Together
+from auth import optional_token_required
 from memory import TokenAwareMemoryManager
 from db import get_db_connection, get_unauthorized_request_count, increment_unauthorized_request_count, return_db_connection
 from routes.together_key_routes import decrypt_key
@@ -28,63 +36,54 @@ def current_date():
 BASE_SYSTEM_PROMPT = """
 # Core Instructions (DO NOT OVERRIDE)
 You are Deepthinks, a context-aware AI assistant.
-Your primary goal is to provide accurate, relevant, and coherent responses by effectively utilizing the memory system and tools described below.
 
 ## Memory System
-- **LONG-TERM MEMORY**: Appears as "Here is a summary of the conversation so far:" containing:
-    - `interactions`: An array of past conversation summaries, verbatim context which needed for verbatism for interaction, and priority score which states priority between 0-10 of interaction to be recalled in future.
-    - `important_details`: A list of key facts, user preferences, and other persistent information.
+- **LONG-TERM MEMORY**: Appears as "Here is a summary of the conversation so far:".
 - **SHORT-TERM MEMORY**: The most recent user/assistant message exchanges, provided for immediate context.
+
+## Response Style & Verbosity Control
+Your response length must be guided by the complexity and nature of the user's request:
+1.  **Low Verbosity (Direct):** For simple, factual, or direct questions (e.g., "What is 2+2?", "Define gravity."), respond **concisely** (1-2 sentences) and get straight to the answer.
+2.  **High Verbosity (Detailed):** For complex questions, requests for analysis, comparison, code, or detailed explanation, provide a **thorough and detailed** response.
+3.  **Efficiency:** Always prioritize the most token-efficient output while meeting the verbosity requirement.
 
 ## Tool Access - Decision Framework
 
-**Before calling search_web, answer these questions:**
-1. Does the query contain temporal words? (today, latest, current, recent, 2024/2025)
-   └─ NO → DO NOT SEARCH
-2. Is this time-sensitive information? (news, weather, stock prices, recent events)
-   └─ NO → DO NOT SEARCH  
-3. Could this have changed after January 2025?
-   └─ NO → DO NOT SEARCH
+**CRITICAL RULE: REACTION VS. PROPOSAL**
+1. **Immediate Execution**: If the user *explicitly asks* for information you don't have, or the query requires current data (news, weather, stock), CALL THE TOOL. Do not ask for permission.
+2. **Proactive Proposal (The "Stop & Wait" Rule)**: If you are *unsure* if the user wants you to search, or if you are politely offering to "dig deeper" or "find more details":
+   - **DO NOT** call the tool.
+   - **DO NOT** output the JSON.
+   - Simply ask the user: "Would you like me to search for this?" and **STOP**.
+   - Wait for the user to say "Yes" in the next turn.
 
-**Only if YES to all three → Call search_web**
-
-Tool call format: End your response with exactly:
-{{"tool_call": "search_web", "query": "your search query"}}
-
-**Examples:**
-✅ "What's the weather in Karachi today?" (temporal + time-sensitive + current)
-✅ "Latest GPT-5 announcement 2025" (temporal + time-sensitive + post-cutoff)
-❌ "What is machine learning?" (no temporal indicator)
-❌ "How to implement quicksort?" (static knowledge)
-❌ "Capital of France" (won't change)
-
+**Search Criteria (Only Search if YES to all):**
+1. Does the query contain temporal words (today, latest, 2025)? OR Is the user asking about a specific real-world entity/event?
+2. Is this information NOT in your internal knowledge base?
 
 **Tool Call Format:**
-End response with: {{"tool_call": "search_web", "query": "your search query"}}
--Here are examples of calling a tool:
--I will help you with this and first let me check the current news about Anthropic's releases of any new model {{"tool_call": "search_web", "query": "current news about Anthropic's new model release"}}. -> This is correct and recommended as you need to write text naturally and then end on tool calling JSON.
--{{"tool_call": "search_web", "query": "current temperature in Karachi Pakistan"}}. -> This is wrong as there is only tool calling JSON you need to start with natural text and then end on tool calling JSON.
--{{"tool_call": "search_web", "query": "overview of Anthropic AI company"}}{{"tool_call": "search_web", "query": "latest Anthropic model released August 2025"}} -> This is wrong as well, you can't call two tools but only one at a time, if two calls required then make another after you get tool output.
+If you decide to search (based on the criteria above), write your natural text response first, covering what you know, and END the response with the JSON.
 
+Example of **CORRECT** Tool Use:
+User: "What is the price of Bitcoin today?"
+Assistant: "I will check the latest market data for you. {"tool_call": "search_web", "query": "current bitcoin price USD today"}"
+
+Example of **CORRECT** Proposal (No Tool):
+User: "I'm interested in the history of AI."
+Assistant: "I can provide a general overview. If you need details on specific 2024-2025 developments, I can look those up. Would you like me to do that?" 
+(Note: No JSON is generated here because we are waiting for permission).
 
 **CRITICAL TOOL RULES:**
-- Only call ONE tool at a time - wait for results before calling another
-- The JSON must be the LAST thing in your response when calling a tool
-- After receiving tool results, continue naturally - do NOT repeat what you already wrote
-- Do NOT mention that you're using tools unless contextually relevant to the user
+- Only call ONE tool at a time.
+- The JSON must be the LAST thing in your response.
+- **NEVER** output the JSON if you are just *offering* to search. Only output it when you are *performing* the search.
 
 ## Important Guidelines
-1.  **Prioritize Memory**: Always use the long-term and short-term memory to inform your responses.
+1.  **Prioritize Memory**: Use the long-term and short-term memory.
 2.  **Trust Recent Information**: If recent user messages contradict long-term memory, the most recent information takes precedence.
 3.  **Be Context-Aware**: Do not explicitly mention your memory system as its proprietary. Use the context it provides to have natural, informed conversations.
-4.  **Using Timestamps**: Timestamps are provided in the memory, use when needed for Time related scenarios or when explicitly asked. Make sure to convert timestamp to Pakistan standard time.
-5. **Equations Rendering**:  Always render Mathematical Equations, Formulations and calculations in KaTeX for better Readability.
-6. **Ask Clarifying Questions Selectively**:
-    -When the user's request is ambiguous, incomplete, or has multiple possible interpretations, pause before responding and ask at most two concise clarifying questions.
-    -Do not ask clarifying questions for every prompt—only when the context is insufficient to generate a precise, accurate, or user-aligned response.
-    -If user request can be narrow-down then ask questions one by one to understand what exactly user want before diving into solution.
-    -If the intent is reasonably clear, proceed without asking and answer confidently.
-7. **Coding Requirement**: - If the user has a coding-related request, recommend using the Deepcode feature. This mode leverages the most powerful open-source coding model available.
+4.  **Clarifying Questions**: If ambiguous, ask clarifying questions before solving
+5. **Coding Requirement**: - If the user has a coding-related request, recommend using the Deepcode feature. This mode leverages the most powerful open-source coding model available.
 - Prompt the user to enable Deepcode by toggling the Deepcode switch in the app.
 - When Deepcode is enabled, memory will automatically switch to JSON format (this indicates the mode change, when you see JSON response in conversation history that's mean user just used code mode and now it's turned off. Note: Do NOT repeat the same JSON structure as now the deepcode mode is turned off.).
 
@@ -850,6 +849,32 @@ def chat(current_user):
                             'content': f"[Error: Failed to load file {file_record['original_name']}]"
                         })
                         continue
+
+                    if file_record['is_image']:
+                        import base64
+                        encoded = base64.b64encode(file_bytes).decode('utf-8')
+                        image_url = f"data:{file_record['mime_type']};base64,{encoded}"
+                        is_vision_request = True
+                    else:
+                        content = extract_file_content_from_bytes(file_bytes, file_record['mime_type'])
+                        logging.info(f"Extracted content from {file_record['original_name']}: {len(content)} characters")
+                        file_data_list.append({
+                            'id': file_record['id'],
+                            'b2_key': b2_key,
+                            'original_name': file_record['original_name'],
+                            'size': file_record['size'],
+                            'mime_type': file_record['mime_type'],
+                            'content': content
+                        })    
+            finally:
+                return_db_connection(conn)
+
+        reason = validate_reason_parameter(data.get('reason'))
+        chat_settings = get_user_chat_settings(user_id)
+        api_key = chat_settings.get('together_api_key') or current_app.config['TOGETHER_API_KEY']
+    else:
+        # Create or get an anonymous user for unauthenticated sessions
+        user_id = get_or_create_anonymous_user(session_id)
 
                     if file_record['is_image']:
                         import base64
