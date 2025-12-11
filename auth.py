@@ -26,7 +26,10 @@ def token_required(f):
     """Decorator to protect routes with JWT authentication."""
     @wraps(f)
     def decorated(*args, **kwargs):
+        # Check header first, then query param (for popup OAuth flows)
         token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        if not token:
+            token = request.args.get('token', '')
         if not token:
             return jsonify({'message': 'Token is missing'}), 401
         try:

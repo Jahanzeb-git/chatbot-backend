@@ -6,14 +6,6 @@ import asyncio
 from flask import Blueprint, request, jsonify, Response, stream_with_context, current_app
 from together import Together
 from auth import optional_token_required
-import json
-import logging
-import re
-import tiktoken
-import asyncio
-from flask import Blueprint, request, jsonify, Response, stream_with_context, current_app
-from together import Together
-from auth import optional_token_required
 from memory import TokenAwareMemoryManager
 from db import get_db_connection, get_unauthorized_request_count, increment_unauthorized_request_count, return_db_connection
 from routes.together_key_routes import decrypt_key
@@ -47,36 +39,33 @@ Your response length must be guided by the complexity and nature of the user's r
 2.  **High Verbosity (Detailed):** For complex questions, requests for analysis, comparison, code, or detailed explanation, provide a **thorough and detailed** response.
 3.  **Efficiency:** Always prioritize the most token-efficient output while meeting the verbosity requirement.
 
-## Tool Access - Decision Framework
+## Tool Access
 
-**CRITICAL RULE: REACTION VS. PROPOSAL**
-1. **Immediate Execution**: If the user *explicitly asks* for information you don't have, or the query requires current data (news, weather, stock), CALL THE TOOL. Do not ask for permission.
-2. **Proactive Proposal (The "Stop & Wait" Rule)**: If you are *unsure* if the user wants you to search, or if you are politely offering to "dig deeper" or "find more details":
-   - **DO NOT** call the tool.
-   - **DO NOT** output the JSON.
-   - Simply ask the user: "Would you like me to search for this?" and **STOP**.
-   - Wait for the user to say "Yes" in the next turn.
+**Available Tools:**
+- search_web: Current information (news, weather, stocks, etc.)
+- email_tool: Gmail operations (search, read, send, manage emails)
 
-**Search Criteria (Only Search if YES to all):**
-1. Does the query contain temporal words (today, latest, 2025)? OR Is the user asking about a specific real-world entity/event?
-2. Is this information NOT in your internal knowledge base?
+**Decision Rule:**
+Explicit request → Execute immediately
+Uncertain → Ask first
 
-**Tool Call Format:**
-If you decide to search (based on the criteria above), write your natural text response first, covering what you know, and END the response with the JSON.
+**Format:**
+Write natural text, END with: {{"tool_call": "tool_name", "query": "detailed description"}}
 
-Example of **CORRECT** Tool Use:
-User: "What is the price of Bitcoin today?"
-Assistant: "I will check the latest market data for you. {"tool_call": "search_web", "query": "current bitcoin price USD today"}"
+**Examples:**
+✓ "Bitcoin price today?" → "Great, I will check the latest market data for you. {{"tool_call": "search_web", "query": "current bitcoin price USD today"}}"
+✓ "Find email from John" → "I will search your email for John . {{"tool_call": "email_tool", "query": "find latest email from John"}}"
+✓ "AI history?" → "I can overview. Want 2024-2025 specifics?" (No JSON - waiting for confirmation)
 
-Example of **CORRECT** Proposal (No Tool):
-User: "I'm interested in the history of AI."
-Assistant: "I can provide a general overview. If you need details on specific 2024-2025 developments, I can look those up. Would you like me to do that?" 
-(Note: No JSON is generated here because we are waiting for permission).
+**Rules:**
+- One tool at a time
+- JSON must be LAST
+- Never output JSON when just offering
 
-**CRITICAL TOOL RULES:**
-- Only call ONE tool at a time.
-- The JSON must be the LAST thing in your response.
-- **NEVER** output the JSON if you are just *offering* to search. Only output it when you are *performing* the search.
+**Important Guidelines for Tool Use:**
+1. You have search_web and email_tool, both usage is pretty much same and follows same structure.
+2. IMPORTANT: 'query' field is particularly highly important for both tools, specially for email_tool since it's micro-agentic tool and it's accuracy depends on query that capture user request intent and request details correctly otherwise email_tool will struggle or hallucinate.
+
 
 ## Important Guidelines
 1.  **Prioritize Memory**: Use the long-term and short-term memory.
@@ -111,6 +100,10 @@ You are Deepthinks, a context-aware AI assistant.
 ## Tool Architecture in Code Mode
 You respond ONLY in JSON format following the CodeResponse schema. Tool calls are integrated at specific points in your response flow:
 
+**Available Tools:**
+- search_web: Current information (news, weather, stocks, etc.)
+- email_tool: Gmail operations (search, read, send, manage emails)
+
 ### Available Tool Call Points:
 1. **tool_after_text**: After writing the Text field (before Files)
 2. **tool_before_file**: Before generating a specific file (inside Files array)
@@ -118,64 +111,12 @@ You respond ONLY in JSON format following the CodeResponse schema. Tool calls ar
 4. **tool_before_conclusion**: Before writing the Conclusion field
 
 ### Tool Call Mechanism:
-- At any point, populate ONE tool field with: `{{"tool_name": "search_web", "query": "your query"}}`
+- At any point, populate ONE tool field with: `{{"tool_name": "name", "query": "your query"}}`
 - Set ALL OTHER fields to `null` (except content you're actively writing)
 - After receiving tool results, set the used tool field to `null` and continue
 - NEVER repeat content from previous responses - only fill new fields
 
-### Tool Usage Decision Tree:
-
-**STEP 1: Check File Context First**
-```
-Is the information needed ALREADY in the attached files?
-├─ YES → Use file content, DO NOT search
-└─ NO → Proceed to Step 2
-```
-
-**STEP 2: Evaluate Information Type**
-```
-Is the information:
-├─ Static programming knowledge (syntax, concepts, patterns)? 
-│  └─ DO NOT SEARCH (use existing knowledge)
-├─ Established library documentation (React, Python, Node.js, etc.)?
-│  └─ DO NOT SEARCH (pre-cutoff knowledge)
-├─ Breaking changes/features released AFTER January 2025?
-│  └─ SEARCH via appropriate tool field
-├─ Real-time API status, service availability?
-│  └─ SEARCH via appropriate tool field
-└─ Current best practices for emerging tech (2025)?
-   └─ SEARCH via appropriate tool field
-```
-
-### Critical Rules for File-Based Requests:
-
-**When Files Are Attached:**
-- ALL information about file structure, content, functions, variables, dependencies IS PROVIDED
-- Analyze files thoroughly before considering any tool use
-- DO NOT search for:
-  - Variable/function names in the files
-  - Code structure or architecture (already visible)
-  - Library imports (versions visible in files)
-  - Error explanations (analyze code instead)
-  - Optimization strategies (reason about code)
-
-**Example Decision Making:**
-
-User: "Optimize these 5 React components"
-Files: [5 React files with full code]
-Decision: ❌ NO SEARCH - All information is in files
-Action: Fill Text + Files with analysis/optimization
-
-User: "Use the new React 19 'use' hook in these components"  
-Files: [5 React files]
-Decision: ✅ SEARCH if React 19 released after Jan 2025
-Tool Field: `tool_after_text` (need info before writing files)
-Query: "React 19 use hook official documentation syntax 2025"
-
-User: "Add TypeScript to this JavaScript project"
-Files: [JS files]
-Decision: ❌ NO SEARCH - TypeScript setup is standard knowledge
-Action: Generate files directly
+**Avoid tool call for information provided in attached files.**
 
 ### Tool Field Selection Logic:
 
@@ -234,6 +175,9 @@ Action: Generate files directly
   "Conclusion": "Your authentication system follows current security standards..."
 }}
 ```
+**Important Guidelines for Tool Use:**
+1. You have search_web and email_tool, both usage is pretty much same and follows same structure.
+2. IMPORTANT: 'query' field is particularly highly important for both tools, specially for email_tool since it's micro-agentic tool and it's accuracy depends on query that capture user request intent and request details correctly otherwise email_tool will struggle or hallucinate.
 
 ## Important Guidelines
 1.  **Prioritize Memory**: Always use long-term and short-term memory to inform responses.
@@ -787,6 +731,43 @@ def store_search_web_urls(user_id, session_id, chat_history_id, search_calls):
         return_db_connection(conn)
 
 
+def store_email_tool_data(user_id, session_id, chat_history_id, email_tool_data):
+    """
+    Store email_tool execution data in database for history UI reconstruction.
+    
+    Args:
+        user_id: User ID
+        session_id: Session number
+        chat_history_id: Chat history record ID
+        email_tool_data: Dict with {query, success, total_iterations, summary, iterations, timestamp}
+    """
+    if not email_tool_data:
+        return
+    
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO email_tool_logs
+               (user_id, session_number, chat_history_id, query, success, total_iterations, summary, iterations_json, timestamp)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (user_id, int(session_id), chat_history_id, 
+             email_tool_data.get('query', ''),
+             email_tool_data.get('success', True),
+             email_tool_data.get('total_iterations', 0),
+             email_tool_data.get('summary', ''),
+             json.dumps(email_tool_data.get('iterations', [])),
+             email_tool_data.get('timestamp', datetime.now(timezone.utc).isoformat()))
+        )
+        conn.commit()
+        logging.info(f"Stored email_tool data for chat_history_id {chat_history_id}")
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"Failed to store email_tool data: {e}", exc_info=True)
+    finally:
+        return_db_connection(conn)
+
+
 @chat_bp.route('/chat', methods=['POST'])
 @optional_token_required
 def chat(current_user):
@@ -875,32 +856,6 @@ def chat(current_user):
     else:
         # Create or get an anonymous user for unauthenticated sessions
         user_id = get_or_create_anonymous_user(session_id)
-
-                    if file_record['is_image']:
-                        import base64
-                        encoded = base64.b64encode(file_bytes).decode('utf-8')
-                        image_url = f"data:{file_record['mime_type']};base64,{encoded}"
-                        is_vision_request = True
-                    else:
-                        content = extract_file_content_from_bytes(file_bytes, file_record['mime_type'])
-                        logging.info(f"Extracted content from {file_record['original_name']}: {len(content)} characters")
-                        file_data_list.append({
-                            'id': file_record['id'],
-                            'b2_key': b2_key,
-                            'original_name': file_record['original_name'],
-                            'size': file_record['size'],
-                            'mime_type': file_record['mime_type'],
-                            'content': content
-                        })    
-            finally:
-                return_db_connection(conn)
-
-        reason = validate_reason_parameter(data.get('reason'))
-        chat_settings = get_user_chat_settings(user_id)
-        api_key = chat_settings.get('together_api_key') or current_app.config['TOGETHER_API_KEY']
-    else:
-        # Create or get an anonymous user for unauthenticated sessions
-        user_id = get_or_create_anonymous_user(session_id)
         if user_id is None:
             return jsonify({"error": "Please login to continue conversation."}), 429
             
@@ -963,6 +918,7 @@ def chat(current_user):
         default_mode_full_response = ""
 
         search_web_calls = []  # Track search_web executions: [{query, urls, timestamp}]
+        email_tool_data = None  # Track email_tool execution: {query, success, total_iterations, summary, iterations, timestamp}
 
         try:
             # Main tool loop
@@ -1031,7 +987,7 @@ def chat(current_user):
                             loop = asyncio.new_event_loop()
                             asyncio.set_event_loop(loop)
                             tool_result = loop.run_until_complete(
-                                execute_tool(tool_name, {'query': tool_query})
+                                execute_tool(tool_name, {'query': tool_query}, user_id=user_id, session_id=str(session_id), socketio_instance=current_app.socketio if hasattr(current_app, 'socketio') else None)
                             )
                             loop.close()
                             # Track search_web URLs
@@ -1063,6 +1019,19 @@ def chat(current_user):
                                         if conn:
                                             return_db_connection(conn)
 
+                            # Track email_tool data for history persistence
+                            if tool_name == 'email_tool' and tool_result.get('success'):
+                                result_data = tool_result.get('result', {})
+                                email_tool_data = {
+                                    'query': tool_query,
+                                    'success': result_data.get('success', True),
+                                    'total_iterations': result_data.get('total_iterations', 0),
+                                    'summary': result_data.get('summary', ''),
+                                    'iterations': result_data.get('iterations', []),
+                                    'timestamp': datetime.now(timezone.utc).isoformat()
+                                }
+                                logging.info(f"Captured email_tool data with {email_tool_data['total_iterations']} iterations")
+
                             if not tool_result.get('success'):
                                 logging.error(f"Tool execution failed: {tool_result.get('error')}")
                                 # Continue without tool result
@@ -1071,7 +1040,7 @@ def chat(current_user):
                             tool_call_count += 1
 
                             # Extract only essential search results
-                            essential_results = extract_essential_search_results(tool_result['result'])
+                            essential_results = tool_result.get('result', tool_result) if tool_name == 'email_tool' else extract_essential_search_results(tool_result['result'])
                             # Prepare continuation prompt
                             continuation_prompt = CODE_CONTINUATION_PROMPT_TEMPLATE.format(
                                 original_query=original_prompt,
@@ -1130,7 +1099,7 @@ def chat(current_user):
                             loop = asyncio.new_event_loop()
                             asyncio.set_event_loop(loop)
                             tool_result = loop.run_until_complete(
-                                execute_tool(tool_name, {'query': tool_query})
+                                execute_tool(tool_name, {'query': tool_query}, user_id=user_id, session_id=str(session_id), socketio_instance=current_app.socketio if hasattr(current_app, 'socketio') else None)
                             )
                             loop.close()
                             # Track search_web URLs
@@ -1161,6 +1130,19 @@ def chat(current_user):
                                         logging.error(f"Failed to update realtime cache: {e}", exc_info=True)
                                         if conn:
                                             return_db_connection(conn)
+
+                            # Track email_tool data for history persistence
+                            if tool_name == 'email_tool' and tool_result.get('success'):
+                                result_data = tool_result.get('result', {})
+                                email_tool_data = {
+                                    'query': tool_query,
+                                    'success': result_data.get('success', True),
+                                    'total_iterations': result_data.get('total_iterations', 0),
+                                    'summary': result_data.get('summary', ''),
+                                    'iterations': result_data.get('iterations', []),
+                                    'timestamp': datetime.now(timezone.utc).isoformat()
+                                }
+                                logging.info(f"Captured email_tool data with {email_tool_data['total_iterations']} iterations")
 
                             logging.info(f"Tool result type: {type(tool_result)}")
                             logging.info(f"Tool result keys: {list(tool_result.keys()) if isinstance(tool_result, dict) else 'NOT A DICT'}")
@@ -1201,7 +1183,7 @@ def chat(current_user):
                                 tool_result_data = tool_result
 
                             # Extract only essential search results
-                            essential_results = extract_essential_search_results(tool_result['result'])
+                            essential_results = tool_result.get('result', tool_result) if tool_name == 'email_tool' else extract_essential_search_results(tool_result['result'])
 
                             continuation_prompt = CONTINUATION_PROMPT_TEMPLATE.format(
                                 original_query=original_prompt,
@@ -1289,6 +1271,10 @@ def chat(current_user):
                             # Store search_web URLs
                         if search_web_calls:
                             store_search_web_urls(user_id, session_id, last_chat_id, search_web_calls)
+                        
+                        # Store email_tool data
+                        if email_tool_data:
+                            store_email_tool_data(user_id, session_id, last_chat_id, email_tool_data)
 
                     logging.info(f"Added code interaction with tool usage: {output_token_count} tokens")
 
@@ -1332,6 +1318,10 @@ def chat(current_user):
                         # Store search_web URLs
                         if search_web_calls:
                             store_search_web_urls(user_id, session_id, last_chat_id, search_web_calls)
+                        
+                        # Store email_tool data
+                        if email_tool_data:
+                            store_email_tool_data(user_id, session_id, last_chat_id, email_tool_data)
 
                     logging.info(f"Added reasoning interaction with tool usage: {cleaned_output_tokens} tokens")
 
@@ -1375,6 +1365,10 @@ def chat(current_user):
                         # Store search_web URLs
                         if search_web_calls:
                             store_search_web_urls(user_id, session_id, last_chat_id, search_web_calls)
+                        
+                        # Store email_tool data
+                        if email_tool_data:
+                            store_email_tool_data(user_id, session_id, last_chat_id, email_tool_data)
 
                     logging.info(f"Added default interaction with tool usage: {output_token_count} tokens")
 

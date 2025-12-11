@@ -11,13 +11,13 @@ connection_pool = None
 def init_connection_pool():
     """Initialize PostgreSQL connection pool."""
     global connection_pool
-    
+
     if connection_pool is not None:
         logging.info("Connection pool already initialized")
         return
-    
+
     try:
-        connection_pool = psycopg2.pool.ThreadedConnectionPool(
+        connection_pool = psycopg2.pool.ThreadedConnectionPool(        
             current_app.config['DB_POOL_MIN_CONNECTIONS'],
             current_app.config['DB_POOL_MAX_CONNECTIONS'],
             current_app.config['DATABASE_URL']
@@ -33,14 +33,14 @@ def get_db_connection():
     Returns a connection with dict cursor for easy column access.
     """
     global connection_pool
-    
+
     if connection_pool is None:
-        try: 
+        try:
             from flask import current_app
             init_connection_pool()
-        except Exception as e: 
+        except Exception as e:
             raise RuntimeError(f"Failed to auto-initialize connection pool: {e}")
-    
+
     try:
         conn = connection_pool.getconn()
         conn.cursor_factory = RealDictCursor
@@ -52,7 +52,7 @@ def get_db_connection():
 def return_db_connection(conn):
     """Return a connection to the pool."""
     global connection_pool
-    
+
     if connection_pool is not None and conn is not None:
         connection_pool.putconn(conn)
 
@@ -72,7 +72,7 @@ def get_db():
 def close_connection_pool():
     """Close all connections in the pool."""
     global connection_pool
-    
+
     if connection_pool is not None:
         connection_pool.closeall()
         connection_pool = None
@@ -81,11 +81,11 @@ def close_connection_pool():
 def init_db():
     """Initialize the database schema for PostgreSQL."""
     logging.info("Initializing PostgreSQL database with schema...")
-    
+
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        
+
         # PostgreSQL schema - note the differences from SQLite:
         # - SERIAL instead of AUTOINCREMENT
         # - TIMESTAMP instead of DATETIME
@@ -98,7 +98,7 @@ def init_db():
             password TEXT,
             profile_picture TEXT
         );
-        
+
         CREATE TABLE IF NOT EXISTS api_logs (
             id SERIAL PRIMARY KEY,
             user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -106,7 +106,7 @@ def init_db():
             model TEXT,
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-        
+
         CREATE TABLE IF NOT EXISTS conversation_memory (
             user_id INTEGER NOT NULL,
             session_number INTEGER NOT NULL,
@@ -116,7 +116,7 @@ def init_db():
             PRIMARY KEY (user_id, session_number),
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
-        
+
         CREATE TABLE IF NOT EXISTS user_settings (
             user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
             system_prompt TEXT,
@@ -126,7 +126,7 @@ def init_db():
             theme TEXT DEFAULT 'Light',
             together_api_key TEXT
         );
-        
+
         CREATE TABLE IF NOT EXISTS chat_history (
             id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -137,12 +137,12 @@ def init_db():
             token_count INTEGER DEFAULT 0,
             original_prompt TEXT NOT NULL
         );
-        
+
         CREATE TABLE IF NOT EXISTS unauthorized_request_counts (
             session_id TEXT PRIMARY KEY,
             request_count INTEGER DEFAULT 0
         );
-        
+
         CREATE TABLE IF NOT EXISTS token_usage (
             id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -156,10 +156,10 @@ def init_db():
             api_key_identifier TEXT DEFAULT '_default',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-        
-        CREATE INDEX IF NOT EXISTS idx_token_usage_user_time 
+
+        CREATE INDEX IF NOT EXISTS idx_token_usage_user_time
         ON token_usage (user_id, raw_timestamp DESC);
-        
+
         CREATE TABLE IF NOT EXISTS conversation_shares (
             share_id TEXT PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -171,10 +171,10 @@ def init_db():
             revoked INTEGER DEFAULT 0,
             meta_json TEXT
         );
-        
-        CREATE INDEX IF NOT EXISTS idx_shares_user_session 
+
+        CREATE INDEX IF NOT EXISTS idx_shares_user_session
         ON conversation_shares (user_id, session_number);
-        
+
         CREATE TABLE IF NOT EXISTS uploaded_files (
             id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -186,7 +186,7 @@ def init_db():
             is_image INTEGER DEFAULT 0,
             uploaded_at TEXT NOT NULL
         );
-        
+
         CREATE TABLE IF NOT EXISTS chat_files (
             chat_history_id INTEGER NOT NULL REFERENCES chat_history(id) ON DELETE CASCADE,
             file_id INTEGER NOT NULL REFERENCES uploaded_files(id) ON DELETE CASCADE,
@@ -204,10 +204,10 @@ def init_db():
             timestamp TEXT NOT NULL
         );
 
-        CREATE INDEX IF NOT EXISTS idx_search_logs_chat 
+        CREATE INDEX IF NOT EXISTS idx_search_logs_chat
         ON search_web_logs (chat_history_id);
 
-        CREATE INDEX IF NOT EXISTS idx_search_logs_session 
+        CREATE INDEX IF NOT EXISTS idx_search_logs_session
         ON search_web_logs (user_id, session_number);
 
         CREATE TABLE IF NOT EXISTS search_web_realtime_cache (
@@ -218,19 +218,59 @@ def init_db():
             PRIMARY KEY (user_id, session_number)
         );
 
-        CREATE INDEX IF NOT EXISTS idx_search_realtime_cache 
+        CREATE TABLE IF NOT EXISTS user_gmail_tokens (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            access_token TEXT NOT NULL,
+            refresh_token TEXT NOT NULL,
+            token_expiry TIMESTAMP,
+            email_address TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_search_realtime_cache
         ON search_web_realtime_cache (user_id, session_number, updated_at);
-        
-        CREATE INDEX IF NOT EXISTS idx_uploaded_files_user 
+
+        CREATE TABLE IF NOT EXISTS email_tool_logs (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            session_number INTEGER NOT NULL,
+            chat_history_id INTEGER REFERENCES chat_history(id) ON DELETE CASCADE,
+            query TEXT NOT NULL,
+            success BOOLEAN NOT NULL DEFAULT TRUE,
+            total_iterations INTEGER NOT NULL DEFAULT 0,
+            summary TEXT,
+            iterations_json TEXT NOT NULL,
+            timestamp TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_email_tool_logs_chat
+        ON email_tool_logs (chat_history_id);
+
+        CREATE INDEX IF NOT EXISTS idx_email_tool_logs_session
+        ON email_tool_logs (user_id, session_number);
+
+        CREATE TABLE IF NOT EXISTS email_tool_realtime_cache (
+            user_id INTEGER NOT NULL,
+            session_number INTEGER NOT NULL,
+            data_json TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, session_number)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_email_tool_realtime_cache
+        ON email_tool_realtime_cache (user_id, session_number, updated_at);
+
+        CREATE INDEX IF NOT EXISTS idx_uploaded_files_user
         ON uploaded_files (user_id, session_number);
-        
-        CREATE INDEX IF NOT EXISTS idx_chat_files_chat 
+
+        CREATE INDEX IF NOT EXISTS idx_chat_files_chat
         ON chat_files (chat_history_id);
         """)
-        
+
         conn.commit()
         logging.info("PostgreSQL database initialization complete")
-        
+
     except Exception as e:
         conn.rollback()
         logging.error(f"Database initialization failed: {e}", exc_info=True)
@@ -262,9 +302,9 @@ def increment_unauthorized_request_count(session_id):
         cursor = conn.cursor()
         cursor.execute(
             """
-            INSERT INTO unauthorized_request_counts (session_id, request_count) 
-            VALUES (%s, 1) 
-            ON CONFLICT(session_id) 
+            INSERT INTO unauthorized_request_counts (session_id, request_count)
+            VALUES (%s, 1)
+            ON CONFLICT(session_id)
             DO UPDATE SET request_count = unauthorized_request_counts.request_count + 1
             """,
             (session_id,)

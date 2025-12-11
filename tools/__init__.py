@@ -6,19 +6,30 @@ Supports async tool execution with error handling.
 import logging
 from typing import Dict, Any, Optional
 from .search_web import search_web_tool
+from .email_tool.agent import execute_email_tool
 
 # Tool registry mapping tool names to their execution functions
 TOOL_REGISTRY = {
     "search_web": search_web_tool,
+    "email_tool": execute_email_tool,
 }
 
-async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
+async def execute_tool(
+    tool_name: str, 
+    tool_input: Dict[str, Any],
+    user_id: Optional[int] = None,
+    session_id: Optional[str] = None,
+    socketio_instance = None
+) -> Dict[str, Any]:
     """
     Execute a tool by name with given input.
 
     Args:
         tool_name: Name of the tool to execute
         tool_input: Dictionary containing tool parameters
+        user_id: Optional user ID (required for email_tool)
+        session_id: Optional session ID (required for email_tool)
+        socketio_instance: Optional SocketIO instance (required for email_tool)
 
     Returns:
         Dictionary containing tool result or error information
@@ -37,7 +48,24 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
 
     try:
         tool_function = TOOL_REGISTRY[tool_name]
-        result = await tool_function(tool_input)
+        
+        # Special handling for email_tool which requires additional parameters
+        if tool_name == "email_tool":
+            if not user_id or not session_id:
+                return {
+                    "success": False,
+                    "error": "email_tool requires user_id and session_id",
+                    "tool_name": tool_name
+                }
+            result = await tool_function(
+                user_id=user_id,
+                session_id=str(session_id),
+                query=tool_input.get('query', ''),
+                socketio_instance=socketio_instance
+            )
+        else:
+            # Standard tool execution
+            result = await tool_function(tool_input)
 
         return {
             "success": True,

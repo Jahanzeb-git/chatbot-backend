@@ -27,8 +27,14 @@ def create_app():
     # Set the secret key for session management
     app.secret_key = app.config['SECRET_KEY']
 
-    # 2. Initialize logging
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    # 2. Initialize logging - use stdout and force=True for gunicorn compatibility
+    import sys
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+        stream=sys.stdout,
+        force=True
+    )
 
     # 3. Initialize CORS
     CORS(
@@ -37,6 +43,11 @@ def create_app():
         supports_credentials=True,
         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
     )
+
+    # 3.5. Initialize Flask-SocketIO for email tool
+    from socketio_setup import init_socketio
+    socketio = init_socketio(app)
+    app.socketio = socketio  # Store reference for email tool
 
     # 4. Initialize the database within the app context
     with app.app_context():
@@ -62,6 +73,14 @@ def create_app():
     app.register_blueprint(analytics_bp)
     app.register_blueprint(user_key_bp)
 
+    # 6. Initialize inactivity monitor for Fly.io auto-stop after 15 minutes
+    # This monitors for real HTTP traffic (excludes /ping and /health)
+    # and triggers graceful shutdown after 15 minutes of inactivity
+    from inactivity_monitor import init_inactivity_monitor
+    inactivity_monitor = init_inactivity_monitor(app, timeout_minutes=15)
+    app.inactivity_monitor = inactivity_monitor
+    logging.info("Inactivity monitor initialized: 15 minute timeout")
+
     # ---- Render-specific: Keep-alive ping endpoint ----
     @app.route('/ping', methods=['GET'])
     def ping():
@@ -69,7 +88,7 @@ def create_app():
         Lightweight health check endpoint for Render's sleep prevention.
         Returns immediately without blocking other requests.
         """
-        return jsonify({"status": "ok", "message": "Yep, breathing... barely. Stop poking me."}), 200
+        return jsonify({"status": "ok", "message": "Yep, breathing... barely. Stop poking me."}), 200      
 
     @app.route('/')
     def home():
@@ -206,3 +225,4 @@ def create_app():
 # This part is for running locally with `python app.py`
 # For production, you would point your WSGI server to the `app` object.
 app = create_app()
+socketio = app.socketio  # Get socketio instanceroot

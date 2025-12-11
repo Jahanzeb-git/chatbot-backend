@@ -94,12 +94,37 @@ def get_full_session_history(current_user, session_number):
                 except (json.JSONDecodeError, TypeError) as e:
                     logging.warning(f"Failed to parse search_web URLs for chat_id {chat_id}: {e}")
 
+            # Get email_tool data for this chat interaction
+            cursor.execute(
+                """SELECT query, success, total_iterations, summary, iterations_json, timestamp
+                   FROM email_tool_logs
+                   WHERE chat_history_id = %s""",
+                (chat_id,)
+            )
+            email_log = cursor.fetchone()
+
+            # Parse email_tool call
+            email_tool_call = None
+            if email_log:
+                try:
+                    email_tool_call = {
+                        'query': email_log['query'],
+                        'success': email_log['success'],
+                        'total_iterations': email_log['total_iterations'],
+                        'summary': email_log['summary'],
+                        'iterations': json.loads(email_log['iterations_json']),
+                        'timestamp': email_log['timestamp']
+                    }
+                except (json.JSONDecodeError, TypeError) as e:
+                    logging.warning(f"Failed to parse email_tool data for chat_id {chat_id}: {e}")
+
             history.append({
                 'prompt': row['original_prompt'] or row['prompt'],  # Use original if available
                 'response': row['response'],
                 'timestamp': row['timestamp'],
                 'files': [dict(f) for f in files] if files else [],
-                'search_web_calls': search_web_calls  
+                'search_web_calls': search_web_calls,
+                'email_tool_call': email_tool_call
             })
 
         return jsonify(history)
@@ -225,6 +250,12 @@ def delete_session(current_user, session_number):
             (user_id, session_number)
         )
         
+        # Delete email_tool_realtime_cache
+        cursor.execute(
+            "DELETE FROM email_tool_realtime_cache WHERE user_id = %s AND session_number = %s",
+            (user_id, session_number)
+        )
+        
         conn.commit()
         
         deleted_files = len(files_to_delete)
@@ -304,6 +335,9 @@ def delete_all_sessions(current_user):
         
         # Delete search_web_realtime_cache
         cursor.execute("DELETE FROM search_web_realtime_cache WHERE user_id = %s", (user_id,))
+        
+        # Delete email_tool_realtime_cache
+        cursor.execute("DELETE FROM email_tool_realtime_cache WHERE user_id = %s", (user_id,))
         
         conn.commit()
         
@@ -399,8 +433,15 @@ def get_shared_conversation(share_id):
 
         # check expiry
         if row['expires_at']:
-            expires_at = datetime.fromisoformat(row['expires_at'].replace("Z", ""))
-            if datetime.utcnow() > expires_at:
+            expires_at_value = row['expires_at']
+            if isinstance(expires_at_value, str):
+                expires_at = datetime.fromisoformat(expires_at_value.replace("Z", "+00:00"))
+            elif isinstance(expires_at_value, datetime):
+                expires_at = expires_at_value
+            else:
+                expires_at = None
+            
+            if expires_at and datetime.utcnow() > expires_at.replace(tzinfo=None):
                 return jsonify({"message": "This share has expired"}), 410
 
         # check password
@@ -462,12 +503,37 @@ def get_shared_conversation(share_id):
                 except (json.JSONDecodeError, TypeError) as e:
                     logging.warning(f"Failed to parse search_web URLs for chat_id {chat_id}: {e}")
 
+            # Get email_tool data for this chat interaction
+            cursor.execute(
+                """SELECT query, success, total_iterations, summary, iterations_json, timestamp
+                   FROM email_tool_logs
+                   WHERE chat_history_id = %s""",
+                (chat_id,)
+            )
+            email_log = cursor.fetchone()
+
+            # Parse email_tool call
+            email_tool_call = None
+            if email_log:
+                try:
+                    email_tool_call = {
+                        'query': email_log['query'],
+                        'success': email_log['success'],
+                        'total_iterations': email_log['total_iterations'],
+                        'summary': email_log['summary'],
+                        'iterations': json.loads(email_log['iterations_json']),
+                        'timestamp': email_log['timestamp']
+                    }
+                except (json.JSONDecodeError, TypeError) as e:
+                    logging.warning(f"Failed to parse email_tool data for chat_id {chat_id}: {e}")
+
             history.append({
                 'prompt': row['original_prompt'] or row['prompt'],  # Use original if available
                 'response': row['response'],
                 'timestamp': row['timestamp'],
                 'files': [dict(f) for f in files] if files else [],
-                'search_web_calls': search_web_calls  
+                'search_web_calls': search_web_calls,
+                'email_tool_call': email_tool_call
             })
 
         return jsonify(history)

@@ -27,6 +27,14 @@ GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 TOGETHER_API_KEY = os.getenv('TOGETHER_API_KEY')
 TAVILY_API_KEY = os.getenv('TAVILY_API_KEY')
 
+# --- GMAIL OAUTH CONFIGURATION ---
+GOOGLE_GMAIL_CLIENT_ID = os.getenv('GOOGLE_GMAIL_CLIENT_ID')
+GOOGLE_GMAIL_CLIENT_SECRET = os.getenv('GOOGLE_GMAIL_CLIENT_SECRET')
+
+# --- URL CONFIGURATION ---
+BACKEND_URL = os.getenv('BACKEND_URL', 'https://chatbot-backend-wandering-shadow-534.fly.dev')
+FRONTEND_BASE_URL = os.getenv('FRONTEND_BASE_URL', 'https://deepthinks.netlify.app')
+
 # --- BACKBLAZE B2 CONFIGURATION ---
 B2_KEY_ID = os.getenv('B2_KEY_ID')
 B2_APP_KEY = os.getenv('B2_APP_KEY')
