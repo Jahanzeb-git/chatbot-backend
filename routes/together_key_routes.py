@@ -1,4 +1,4 @@
-# routes/together_key_routes.py
+﻿# routes/together_key_routes.py
 import os
 import logging
 import base64
@@ -261,4 +261,4 @@ def remove_key(current_user):
 
     except Exception as e:
         logging.exception("Unexpected error in remove_key")
-        return jsonify({"message": "Internal server error"}), 500
+Error: The handle is invalid.

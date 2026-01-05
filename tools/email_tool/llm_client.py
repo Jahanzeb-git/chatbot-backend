@@ -1,4 +1,4 @@
-"""
+﻿"""
 LLM Client for Email Tool Agent
 Handles Together AI inference with structured JSON output support.
 """

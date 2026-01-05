@@ -1,4 +1,4 @@
-import json
+﻿import json
 import logging
 import re
 import tiktoken
@@ -43,28 +43,40 @@ Your response length must be guided by the complexity and nature of the user's r
 
 **Available Tools:**
 - search_web: Current information (news, weather, stocks, etc.)
-- email_tool: Gmail operations (search, read, send, manage emails)
+- email_tool: Gmail operations (search, read, send, manage emails) - **FULLY AGENTIC**
 
 **Decision Rule:**
-Explicit request → Execute immediately
-Uncertain → Ask first
+Explicit request ΓåÆ Execute immediately
+Uncertain ΓåÆ Ask first
 
 **Format:**
-Write natural text, END with: {{"tool_call": "tool_name", "query": "detailed description"}}
+Write natural text, END with: {{"tool_call": "tool_name", "query": "brief task description"}}
 
 **Examples:**
-✓ "Bitcoin price today?" → "Great, I will check the latest market data for you. {{"tool_call": "search_web", "query": "current bitcoin price USD today"}}"
-✓ "Find email from John" → "I will search your email for John . {{"tool_call": "email_tool", "query": "find latest email from John"}}"
-✓ "AI history?" → "I can overview. Want 2024-2025 specifics?" (No JSON - waiting for confirmation)
+Γ£ô "Bitcoin price today?" ΓåÆ "I'll check the latest market data. {{"tool_call": "search_web", "query": "current bitcoin price USD today"}}"
+Γ£ô "Find email from John" ΓåÆ "I'll search your emails. {{"tool_call": "email_tool", "query": "find latest email from John"}}"
+Γ£ô "Read emails from Sarah in SENT and reply to her" ΓåÆ "I'll handle that for you. {{"tool_call": "email_tool", "query": "find emails from Sarah in SENT folder and send her a reply"}}"
+Γ£ô "AI history?" ΓåÆ "I can overview. Want 2024-2025 specifics?" (No JSON - waiting for confirmation)
 
 **Rules:**
 - One tool at a time
 - JSON must be LAST
 - Never output JSON when just offering
 
-**Important Guidelines for Tool Use:**
-1. You have search_web and email_tool, both usage is pretty much same and follows same structure.
-2. IMPORTANT: 'query' field is particularly highly important for both tools, specially for email_tool since it's micro-agentic tool and it's accuracy depends on query that capture user request intent and request details correctly otherwise email_tool will struggle or hallucinate.
+**CRITICAL: email_tool is FULLY AGENTIC:**
+1. **ONE CALL FOR ENTIRE TASK**: Always provide the COMPLETE multi-step task in a SINGLE tool call. NEVER split into multiple calls.
+   Γ¥î BAD: First call "search emails from John" ΓåÆ then second call "send reply to John"
+   Γ£à GOOD: Single call "find emails from John and send him a reply saying [brief intent]"
+2. **CONCISE QUERIES ONLY**: State WHAT you want done, not HOW to do it. email_tool decides its own execution strategy.
+   Γ¥î BAD: "Search emails using from_addr parameter with value john@email.com in SENT label"  
+   Γ£à GOOD: "find emails from John in SENT folder"
+3. **NO EMAIL BODY COMPOSITION**: NEVER include full email content/body in the query. Just state the intent.
+   Γ¥î BAD: "send email to sarah@co.com with subject 'Meeting' and body 'Hi Sarah, I wanted to follow up on our conversation...'"
+   Γ£à GOOD: "send sarah@co.com an email following up on our meeting"
+4. **NO CONTEXT INJECTION**: DO NOT include conversation history or context in the query. email_tool can access chat history if needed.
+   Γ¥î BAD: "Based on our discussion about the Python project, send email to john saying..."
+   Γ£à GOOD: "send email to john about the Python project urging him to hurry up"
+5. **TRUST THE AGENT**: email_tool will ask for missing info (like email addresses) on its own. Don't try to solve everything in the query.
 
 
 ## Important Guidelines
@@ -175,9 +187,13 @@ You respond ONLY in JSON format following the CodeResponse schema. Tool calls ar
   "Conclusion": "Your authentication system follows current security standards..."
 }}
 ```
-**Important Guidelines for Tool Use:**
-1. You have search_web and email_tool, both usage is pretty much same and follows same structure.
-2. IMPORTANT: 'query' field is particularly highly important for both tools, specially for email_tool since it's micro-agentic tool and it's accuracy depends on query that capture user request intent and request details correctly otherwise email_tool will struggle or hallucinate.
+```
+**CRITICAL: email_tool is FULLY AGENTIC:**
+- **ONE CALL FOR ENTIRE TASK**: Provide the COMPLETE multi-step task in a SINGLE tool call. NEVER split into multiple calls.
+- **CONCISE QUERIES ONLY**: State WHAT you want done, not HOW. email_tool decides its own execution strategy.
+- **NO EMAIL BODY COMPOSITION**: NEVER include full email content in the query. Just state the intent (e.g., "send reply about the meeting").
+- **NO CONTEXT INJECTION**: Don't include conversation history in the query. email_tool can access chat history if needed.
+- **TRUST THE AGENT**: email_tool will ask for missing info on its own.
 
 ## Important Guidelines
 1.  **Prioritize Memory**: Always use long-term and short-term memory to inform responses.
@@ -276,13 +292,13 @@ TOOL RESULTS:
 - Is additional information ESSENTIAL (not just "nice to have")?
 - Is it time-sensitive/post-cutoff (not existing knowledge)?
 - Is it NOT in the attached files (if any)?
-- If NO to any → Complete response without more tools
+- If NO to any ΓåÆ Complete response without more tools
 
 **To make another tool call (rare):**
 Choose appropriate field based on where you are in the response:
-- Still need info before files? → `tool_after_text`
-- Need info for specific file? → `tool_before_file` or `tool_after_file`
-- Need info for conclusion? → `tool_before_conclusion`
+- Still need info before files? ΓåÆ `tool_after_text`
+- Need info for specific file? ΓåÆ `tool_before_file` or `tool_after_file`
+- Need info for conclusion? ΓåÆ `tool_before_conclusion`
 
 **Default: Complete the response with existing context and tool results.**
 
@@ -384,9 +400,9 @@ def create_stitched_prompt(user_text, file_data_list):
 
     for idx, file_data in enumerate(file_data_list, 1):
         file_size_str = format_file_size(file_data['size'])
-        stitched += f"─── FILE {idx}: {file_data['original_name']} ({file_data['mime_type']}, {file_size_str}) ───\n"
+        stitched += f"ΓöÇΓöÇΓöÇ FILE {idx}: {file_data['original_name']} ({file_data['mime_type']}, {file_size_str}) ΓöÇΓöÇΓöÇ\n"
         stitched += f"{file_data['content']}\n"
-        stitched += f"─── END FILE {idx} ───\n"
+        stitched += f"ΓöÇΓöÇΓöÇ END FILE {idx} ΓöÇΓöÇΓöÇ\n"
 
     return stitched
 
@@ -672,7 +688,7 @@ def extract_essential_search_results(tavily_response: Dict[str, Any]) -> Dict[st
         essential['results'] = []
         for idx, result in enumerate(tavily_response['results'][:3], start=1):  # 1-based indexing
             essential['results'].append({
-                'index': idx,  # ← NEW: Citation index
+                'index': idx,  # ΓåÉ NEW: Citation index
                 'title': result.get('title', ''),
                 'url': result.get('url', ''),
                 'content': result.get('content', '')[:1000]  # Limit to 1000 chars
@@ -691,7 +707,7 @@ def extract_urls_from_tavily_response(tavily_response: Dict[str, Any]) -> List[D
     for idx, result in enumerate(results, start=1):  # 1-based to match LLM citations
         if 'url' in result:
             urls.append({
-                'index': idx,  # ← Citation index
+                'index': idx,  # ΓåÉ Citation index
                 'url': result['url'],
                 'title': result.get('title', 'Untitled')
             })
@@ -774,6 +790,13 @@ def chat(current_user):
     data = request.json or {}
     session_id = data.get('session_id')
     query = data.get('query', '').strip()
+    
+    # Extract client context for timezone-aware tool operations
+    # Frontend should send: client_datetime (ISO string), client_timezone (IANA timezone)
+    client_context = {
+        'local_datetime': data.get('client_datetime'),
+        'timezone': data.get('client_timezone')
+    }
 
     if not session_id or not query:
         return jsonify({"error": "session_id and query are required"}), 400
@@ -987,7 +1010,7 @@ def chat(current_user):
                             loop = asyncio.new_event_loop()
                             asyncio.set_event_loop(loop)
                             tool_result = loop.run_until_complete(
-                                execute_tool(tool_name, {'query': tool_query}, user_id=user_id, session_id=str(session_id), socketio_instance=current_app.socketio if hasattr(current_app, 'socketio') else None)
+                                execute_tool(tool_name, {'query': tool_query}, user_id=user_id, session_id=str(session_id), socketio_instance=current_app.socketio if hasattr(current_app, 'socketio') else None, client_context=client_context)
                             )
                             loop.close()
                             # Track search_web URLs
@@ -1099,7 +1122,7 @@ def chat(current_user):
                             loop = asyncio.new_event_loop()
                             asyncio.set_event_loop(loop)
                             tool_result = loop.run_until_complete(
-                                execute_tool(tool_name, {'query': tool_query}, user_id=user_id, session_id=str(session_id), socketio_instance=current_app.socketio if hasattr(current_app, 'socketio') else None)
+                                execute_tool(tool_name, {'query': tool_query}, user_id=user_id, session_id=str(session_id), socketio_instance=current_app.socketio if hasattr(current_app, 'socketio') else None, client_context=client_context)
                             )
                             loop.close()
                             # Track search_web URLs
@@ -1189,7 +1212,7 @@ def chat(current_user):
                                 original_query=original_prompt,
                                 partial_response=text_before_tool,
                                 tool_call_json=json.dumps(tool_call_data, indent=2),
-                                tool_result_json=json.dumps(essential_results, indent=2)  # ← MUCH SMALLER!
+                                tool_result_json=json.dumps(essential_results, indent=2)  # ΓåÉ MUCH SMALLER!
                             )
 
                             logging.info(f"Essential results size: {len(json.dumps(essential_results))} chars (vs full: {len(json.dumps(tool_result['result']))} chars)")
@@ -1419,4 +1442,4 @@ def get_memory_stats(current_user, session_id):
         return jsonify(stats)
     except Exception as e:
         logging.error(f"Failed to get memory stats: {e}", exc_info=True)
-        return jsonify({"error": "Failed to retrieve memory stats"}), 500
+Error: The handle is invalid.

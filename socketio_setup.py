@@ -1,4 +1,4 @@
-"""
+﻿"""
 Flask-SocketIO setup for email tool WebSocket support.
 Import this in app.py to initialize WebSocket.        
 """
@@ -152,4 +152,4 @@ def init_socketio(app):
             emit('error', {'message': str(e)})
 
     logging.info("Flask-SocketIO initialized for email tool")
-    return socketio
+Error: The handle is invalid.

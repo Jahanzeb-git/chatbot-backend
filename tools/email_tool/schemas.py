@@ -1,4 +1,4 @@
-"""
+﻿"""
 Pydantic Schemas for Email Tool Agent
 Provides type safety and JSON schema for LLM structured outputs.
 """

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Local development server runner for the chatbot backend.
 This file runs the Flask-SocketIO application in development mode with enhanced logging.
 
@@ -42,10 +42,10 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
     host = os.environ.get('HOST', '0.0.0.0')
     
-    print(f"\n🚀 Server starting on http://{host}:{port}")
-    print(f"📧 Gmail OAuth callback URL: http://localhost:{port}/auth/gmail/callback")
-    print(f"🔧 Debug mode: ON")
-    print(f"📝 All logs will be shown in this console")
+    print(f"\n≡ƒÜÇ Server starting on http://{host}:{port}")
+    print(f"≡ƒôº Gmail OAuth callback URL: http://localhost:{port}/auth/gmail/callback")
+    print(f"≡ƒöº Debug mode: ON")
+    print(f"≡ƒô¥ All logs will be shown in this console")
     print("=" * 60 + "\n")
     
     # Run with Flask-SocketIO's development server

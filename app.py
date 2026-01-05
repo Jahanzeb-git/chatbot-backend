@@ -1,4 +1,4 @@
-from gevent import monkey
+﻿from gevent import monkey
 monkey.patch_all() # Patch standard libraries for non-blocking I/O to enable Gevent-based concurrency
 
 import logging
@@ -179,7 +179,7 @@ def create_app():
     <body>
         <div class="container">
             <h1>Chatbot Backend</h1>
-            <p><span class="status">✅ All Systems Operational</span></p>
+            <p><span class="status">Γ£à All Systems Operational</span></p>
             <p>Deployed on <strong>Render (Free Tier)</strong></p>
             <p><em>Last checked:</em> {{ uptime }}</p>
 
@@ -200,7 +200,7 @@ def create_app():
             </table>
 
             <div class="footer">
-                © {{ year }} Chatbot Backend • Flask Monitoring Page
+                ┬⌐ {{ year }} Chatbot Backend ΓÇó Flask Monitoring Page
             </div>
         </div>
     </body>
@@ -225,4 +225,4 @@ def create_app():
 # This part is for running locally with `python app.py`
 # For production, you would point your WSGI server to the `app` object.
 app = create_app()
-socketio = app.socketio  # Get socketio instanceroot
+Error: The handle is invalid.

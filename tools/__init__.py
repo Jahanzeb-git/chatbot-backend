@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tool registry and execution handler for Deepthinks AI Assistant.
 Supports async tool execution with error handling.
 """
@@ -19,7 +19,8 @@ async def execute_tool(
     tool_input: Dict[str, Any],
     user_id: Optional[int] = None,
     session_id: Optional[str] = None,
-    socketio_instance = None
+    socketio_instance = None,
+    client_context: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Execute a tool by name with given input.
@@ -30,6 +31,9 @@ async def execute_tool(
         user_id: Optional user ID (required for email_tool)
         session_id: Optional session ID (required for email_tool)
         socketio_instance: Optional SocketIO instance (required for email_tool)
+        client_context: Optional client context with timezone/datetime info:
+            - local_datetime: ISO string like "2025-12-12T00:35:46+05:00"
+            - timezone: IANA timezone like "Asia/Karachi"
 
     Returns:
         Dictionary containing tool result or error information
@@ -61,7 +65,8 @@ async def execute_tool(
                 user_id=user_id,
                 session_id=str(session_id),
                 query=tool_input.get('query', ''),
-                socketio_instance=socketio_instance
+                socketio_instance=socketio_instance,
+                client_context=client_context
             )
         else:
             # Standard tool execution
@@ -92,4 +97,4 @@ def format_tool_result_for_llm(tool_result: Dict[str, Any]) -> str:
         Formatted string for LLM context
     """
     import json
-    return json.dumps(tool_result, indent=2, ensure_ascii=False)
+Error: The handle is invalid.

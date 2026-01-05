@@ -1,4 +1,4 @@
-"""
+﻿"""
 Gmail API Client Wrapper
 Handles all Gmail operations with OAuth token management.
 """

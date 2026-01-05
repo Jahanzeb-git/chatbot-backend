@@ -1,10 +1,9 @@
-"""
+﻿"""
 Email Tool Agent - Main Orchestration
 Handles agentic loop with WebSocket updates and write operation approval.
 """
 
 import logging
-import asyncio
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from flask import current_app
@@ -17,7 +16,7 @@ from .prompt import (
     build_user_prompt_iteration_1,
     build_user_prompt_iteration_2_plus
 )
-from .schemas import Iteration1Output, ActionSchema, IterationResult     
+from .schemas import Iteration1Output, ActionSchema, IterationResult
 from db import get_db_connection, return_db_connection
 
 
@@ -30,11 +29,11 @@ def get_active_agent(user_id, session_id) -> Optional['EmailToolAgent']:
     # Ensure consistent key format regardless of input types
     key = f"{int(user_id)}_{str(session_id)}"
     agent = _active_agents.get(key)
-    logging.info(f"Looking up agent with key: {key}, found: {agent is not None}")  
+    logging.info(f"Looking up agent with key: {key}, found: {agent is not None}")
     return agent
 
 
-def _register_agent(user_id: int, session_id: str, agent: 'EmailToolAgent'):       
+def _register_agent(user_id: int, session_id: str, agent: 'EmailToolAgent'):
     """Register active agent."""
     key = f"{user_id}_{session_id}"
     _active_agents[key] = agent
@@ -55,7 +54,14 @@ class EmailToolAgent:
     Handles iteration-based execution with WebSocket progress updates.
     """
 
-    def __init__(self, user_id: int, session_id: str, user_query: str, socketio_instance=None):
+    def __init__(
+        self,
+        user_id: int,
+        session_id: str,
+        user_query: str,
+        socketio_instance=None,
+        client_context: Optional[Dict[str, Any]] = None
+    ):
         """
         Initialize email tool agent.
 
@@ -63,13 +69,19 @@ class EmailToolAgent:
             user_id: User ID
             session_id: Session ID for WebSocket room
             user_query: Original user query
-            socketio_instance: Flask-SocketIO instance for real-time updates       
+            socketio_instance: Flask-SocketIO instance for real-time updates
+            client_context: Dict with client timezone/datetime info:
+                - local_datetime: ISO string like "2025-12-12T00:35:46+05:00"
+                - timezone: IANA timezone like "Asia/Karachi"
         """
         self.user_id = user_id
         self.session_id = session_id
         self.user_query = user_query
         self.socketio = socketio_instance
         self.room = f"email_tool_{user_id}_{session_id}"
+        
+        # Store client context for datetime handling
+        self.client_context = client_context or {}
 
         # State
         self.iteration_history: List[IterationResult] = []
@@ -77,6 +89,10 @@ class EmailToolAgent:
         self.needs_approval = False
         self.approval_received = None
         self.auth_completed = None  # For Gmail auth waiting
+        
+        # User context (populated in execute)
+        self.user_email = None
+        self.user_name = None
 
         # Clients
         self.llm_client = EmailToolLLMClient()
@@ -90,7 +106,7 @@ class EmailToolAgent:
             try:
                 logging.info(f"WebSocket ATTEMPTING: {event} to room {self.room} with data: {data}")
 
-                # First, yield to gevent to ensure connection state is up-to-date  
+                # First, yield to gevent to ensure connection state is up-to-date
                 gevent.sleep(0)
 
                 # Emit to specific room
@@ -127,7 +143,7 @@ class EmailToolAgent:
 
                 # Send auth request via WebSocket
                 self._send_websocket('email_tool_needs_auth', {
-                    'message': 'Please connect your Gmail account to continue'     
+                    'message': 'Please connect your Gmail account to continue'
                 })
 
                 # Wait for auth (max 2 minutes)
@@ -135,7 +151,8 @@ class EmailToolAgent:
                 wait_interval = 1.0  # check every second
                 elapsed_time = 0
 
-                while self.auth_completed is None and elapsed_time < max_wait_time:                    # Use gevent.sleep for compatibility with gevent workers       
+                while self.auth_completed is None and elapsed_time < max_wait_time:
+                    # Use gevent.sleep for compatibility with gevent workers
                     gevent.sleep(wait_interval)
                     elapsed_time += wait_interval
                     logging.info(f"Waiting for Gmail auth... {elapsed_time}s / {max_wait_time}s")
@@ -147,7 +164,7 @@ class EmailToolAgent:
 
                 # Check result
                 if not self.auth_completed:
-                    logging.warning(f"Gmail auth timeout after {max_wait_time}s")  
+                    logging.warning(f"Gmail auth timeout after {max_wait_time}s")
                     self._send_websocket('email_tool_error', {
                         'error': 'Gmail authentication timed out. Please try again.'
                     })
@@ -157,19 +174,28 @@ class EmailToolAgent:
                         'needs_auth': True
                     }
 
-                logging.info(f"Gmail auth completed for user {self.user_id}")      
+                logging.info(f"Gmail auth completed for user {self.user_id}")
 
             # Initialize Gmail client
             self.gmail_client = GmailClient(self.user_id)
+            
             # Fetch user's Gmail email address
             self.user_email = self._get_user_email()
+            
+            # Fetch user's preferred name from user_settings
+            self.user_name = self._get_user_name()
+            
+            logging.info(f"User context loaded: email={self.user_email}, name={self.user_name}")
 
             # Iteration 1: Check if conversation history is needed
             needs_history = await self._iteration_1()
 
             # Fetch conversation history if needed
             if needs_history:
-                self.conversation_history = self._fetch_conversation_history()     
+                self.conversation_history = self._fetch_conversation_history()
+                logging.info(f"[EXECUTE] Conversation history loaded: {len(self.conversation_history) if self.conversation_history else 0} messages")
+            else:
+                logging.info("[EXECUTE] Iteration 1 said no conversation history needed - skipping fetch")
 
             # Iteration 2+: Agentic action loop
             result = await self._agentic_loop()
@@ -203,7 +229,7 @@ class EmailToolAgent:
         Returns:
             True if conversation history is needed, False otherwise
         """
-        logging.info("=== Iteration 1: Checking conversation history need ===")    
+        logging.info("=== Iteration 1: Checking conversation history need ===")
 
         # Build prompt
         system_prompt = get_system_prompt(iteration=1)
@@ -236,44 +262,66 @@ class EmailToolAgent:
         Fetch conversation history from database.
 
         Returns:
-            List of message dicts [{"role": "user", "content": "..."}, ...]        
+            List of message dicts [{"role": "user", "content": "..."}, ...]
         """
         conn = get_db_connection()
         try:
             cursor = conn.cursor()
+            
+            # Debug: Log the exact parameters being used
+            logging.info(f"[CONVERSATION_HISTORY] Fetching for user_id={self.user_id}, session_id={self.session_id} (type: {type(self.session_id).__name__})")
+            
+            try:
+                session_num = int(self.session_id)
+                logging.info(f"[CONVERSATION_HISTORY] Converted session_id to int: {session_num}")
+            except (ValueError, TypeError) as e:
+                logging.error(f"[CONVERSATION_HISTORY] Failed to convert session_id '{self.session_id}' to int: {e}")
+                return []
+            
             cursor.execute(
                 """SELECT prompt, response FROM chat_history
                    WHERE user_id = %s AND session_number = %s
                    ORDER BY timestamp ASC
                    LIMIT 10""",
-                (self.user_id, int(self.session_id))
+                (self.user_id, session_num)
             )
             rows = cursor.fetchall()
+            
+            # Debug: Log what we got
+            logging.info(f"[CONVERSATION_HISTORY] Query returned {len(rows)} rows")
 
             messages = []
             for row in rows:
-                messages.append({'role': 'user', 'content': row['prompt']})        
-                messages.append({'role': 'assistant', 'content': row['response']}) 
+                messages.append({'role': 'user', 'content': row['prompt']})
+                messages.append({'role': 'assistant', 'content': row['response']})
+            
+            # Debug: Log sample of what we're returning
+            if messages:
+                sample = messages[-1]['content'][:100] if messages[-1]['content'] else "(empty)"
+                logging.info(f"[CONVERSATION_HISTORY] Returning {len(messages)} messages. Last message sample: {sample}...")
+            else:
+                logging.warning(f"[CONVERSATION_HISTORY] No messages found for user_id={self.user_id}, session_number={session_num}")
 
-            logging.info(f"Fetched {len(messages)} conversation history messages") 
             return messages
 
+        except Exception as e:
+            logging.error(f"[CONVERSATION_HISTORY] Database error: {e}", exc_info=True)
+            return []
         finally:
             return_db_connection(conn)
-
 
     def _get_user_email(self) -> str:
         """
         Get user's Gmail email address from database.
 
         Returns:
-            User's email address or 'Unknown'
+            User's email address or None if not found
         """
         conn = get_db_connection()
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT email_address FROM user_gmail_tokens WHERE user_id = %s",  
+                "SELECT email_address FROM user_gmail_tokens WHERE user_id = %s",
                 (self.user_id,)
             )
             row = cursor.fetchone()
@@ -281,12 +329,85 @@ class EmailToolAgent:
             if row and row['email_address']:
                 return row['email_address']
             else:
-                logging.warning(f"No email found for user {self.user_id}")
-                return "your email"
+                logging.warning(f"No Gmail email found for user {self.user_id}")
+                return None
 
         finally:
             return_db_connection(conn)
 
+    def _get_user_name(self) -> str:
+        """
+        Get user's preferred name from user_settings.
+
+        Returns:
+            User's preferred name or None if not set
+        """
+        conn = get_db_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT what_we_call_you FROM user_settings WHERE user_id = %s",
+                (self.user_id,)
+            )
+            row = cursor.fetchone()
+
+            if row and row['what_we_call_you']:
+                return row['what_we_call_you']
+            else:
+                logging.warning(f"No preferred name found for user {self.user_id}")
+                return None
+
+        finally:
+            return_db_connection(conn)
+
+    def _get_datetime_context(self) -> Dict[str, str]:
+        """
+        Get datetime context from client_context or fallback to UTC.
+        
+        Returns:
+            Dict with current_date, current_time, user_timezone
+        """
+        if self.client_context.get('local_datetime'):
+            try:
+                # Parse client-provided datetime (e.g., "2025-12-12T00:35:46+05:00")
+                client_dt_str = self.client_context['local_datetime']
+                client_dt = datetime.fromisoformat(client_dt_str)
+                
+                current_date = client_dt.strftime("%Y-%m-%d")
+                current_time = client_dt.strftime("%H:%M:%S")
+                
+                # Use provided timezone or extract from offset
+                user_timezone = self.client_context.get('timezone')
+                if not user_timezone:
+                    # Extract offset as timezone indicator
+                    offset = client_dt.strftime("%z")
+                    if offset:
+                        # Convert +0500 to UTC+5
+                        hours = int(offset[:3])
+                        user_timezone = f"UTC{'+' if hours >= 0 else ''}{hours}"
+                    else:
+                        user_timezone = "UTC"
+                
+                logging.info(f"Using client datetime context: {current_date} {current_time} {user_timezone}")
+                
+                return {
+                    'current_date': current_date,
+                    'current_time': current_time,
+                    'user_timezone': user_timezone
+                }
+                
+            except Exception as e:
+                logging.warning(f"Failed to parse client datetime '{self.client_context.get('local_datetime')}': {e}")
+        
+        # Fallback to UTC
+        now = datetime.now(timezone.utc)
+        logging.warning("Using UTC fallback for datetime context - frontend should provide local datetime")
+        
+        return {
+            'current_date': now.strftime("%Y-%m-%d"),
+            'current_time': now.strftime("%H:%M:%S"),
+            'user_timezone': "UTC"
+        }
 
     async def _agentic_loop(self) -> Dict[str, Any]:
         """
@@ -301,22 +422,31 @@ class EmailToolAgent:
         while iteration <= max_iterations:
             logging.info(f"=== Iteration {iteration} ===")
 
-            # Build context
+            # Get datetime context from client or fallback
+            datetime_context = self._get_datetime_context()
+            
+            # Build full context for prompts
             context = {
-                'current_date': datetime.now(timezone.utc).strftime("%Y-%m-%d"),   
-                'user_timezone': 'UTC'  # TODO: Get from user settings
+                'current_date': datetime_context['current_date'],
+                'current_time': datetime_context['current_time'],
+                'user_timezone': datetime_context['user_timezone'],
+                'user_email': self.user_email,
+                'user_name': self.user_name or "User"
             }
 
             # Build prompt with scratchpad
             system_prompt = get_system_prompt(
                 iteration=iteration,
                 current_date=context['current_date'],
-                user_email=self.user_email
+                current_time=context['current_time'],
+                user_timezone=context['user_timezone'],
+                user_email=self.user_email,
+                user_name=self.user_name
             )
             user_prompt = build_user_prompt_iteration_2_plus(
                 user_query=self.user_query,
                 conversation_history=self.conversation_history,
-                iteration_history=[vars(ih) for ih in self.iteration_history],     
+                iteration_history=[vars(ih) for ih in self.iteration_history],
                 current_iteration=iteration,
                 context=context
             )
@@ -415,7 +545,7 @@ class EmailToolAgent:
         wait_interval = 0.5
         elapsed_time = 0
 
-        while self.approval_received is None and elapsed_time < max_wait_time:     
+        while self.approval_received is None and elapsed_time < max_wait_time:
             # Use gevent.sleep for compatibility with gevent workers
             gevent.sleep(wait_interval)
             elapsed_time += wait_interval
@@ -522,7 +652,7 @@ class EmailToolAgent:
             }
 
         except Exception as e:
-            logging.error(f"Function {function_name} failed: {e}", exc_info=True)  
+            logging.error(f"Function {function_name} failed: {e}", exc_info=True)
             return {
                 'success': False,
                 'error': str(e)
@@ -531,7 +661,7 @@ class EmailToolAgent:
     def _build_comprehensive_result(self, final_reasoning: str, total_iterations: int) -> Dict[str, Any]:
         """
         Build comprehensive structured result for main chat LLM.
-        Includes full iteration history with all function calls and results.       
+        Includes full iteration history with all function calls and results.
 
         Args:
             final_reasoning: Final reasoning from agent
@@ -571,7 +701,8 @@ async def execute_email_tool(
     user_id: int,
     session_id: str,
     query: str,
-    socketio_instance=None
+    socketio_instance=None,
+    client_context: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Execute email tool agent.
@@ -581,6 +712,7 @@ async def execute_email_tool(
         session_id: Session ID
         query: User query
         socketio_instance: Flask-SocketIO instance
+        client_context: Client datetime/timezone context
 
     Returns:
         Structured result for main chat LLM
@@ -589,7 +721,8 @@ async def execute_email_tool(
         user_id=user_id,
         session_id=session_id,
         user_query=query,
-        socketio_instance=socketio_instance
+        socketio_instance=socketio_instance,
+        client_context=client_context
     )
 
-    return await agent.execute()
+Error: The handle is invalid.

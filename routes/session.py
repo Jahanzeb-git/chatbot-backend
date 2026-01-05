@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 from datetime import datetime, timezone, timedelta
 from flask import Blueprint, jsonify, current_app, request
 from auth import token_required
@@ -604,4 +604,4 @@ def get_search_web_urls(current_user, session_number):
             'error': str(e)
         }), 200
     finally:
-        return_db_connection(conn)
+Error: The handle is invalid.

@@ -1,4 +1,4 @@
-import json
+﻿import json
 import logging
 import sqlite3
 from datetime import datetime, timezone
@@ -129,7 +129,7 @@ class TokenAwareMemoryManager:
                         f"Retained {len(retained)} interactions ({retained_tokens_sum} tokens), "
                         f"Dynamic K set to {dynamic_k}")
         else:
-            logging.warning("[TokenAwareMemory] Summarization failed — buffer retained.")
+            logging.warning("[TokenAwareMemory] Summarization failed ΓÇö buffer retained.")
 
     def add_interaction(self, prompt, response, response_token_count, full_response_for_history=None, original_prompt=None):
         """
@@ -367,4 +367,3 @@ class MemoryManager(TokenAwareMemoryManager):
 
         # Call the new token-aware method
         super().add_interaction(prompt, response, estimated_tokens, full_response_for_history, original_prompt)
-

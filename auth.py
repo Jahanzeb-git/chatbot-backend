@@ -1,4 +1,4 @@
-import jwt
+﻿import jwt
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from flask import request, jsonify, current_app

@@ -1,4 +1,4 @@
-# gunicorn_config.py
+﻿# gunicorn_config.py
 import multiprocessing
 
 bind = "0.0.0.0:10000"
@@ -117,4 +117,4 @@ def pre_fork(server, worker):
 
 def post_fork(server, worker):
     """Called just after a worker has been forked."""
-    server.log.info(f"Worker spawned with pid: {worker.pid}")
+Error: The handle is invalid.

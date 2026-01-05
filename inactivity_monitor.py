@@ -1,4 +1,4 @@
-"""
+﻿"""
 Inactivity Monitor for Fly.io Container Auto-Stop
 
 This module implements a background greenlet that monitors container inactivity

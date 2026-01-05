@@ -1,4 +1,4 @@
-import psycopg2
+﻿import psycopg2
 from psycopg2 import pool, sql
 from psycopg2.extras import RealDictCursor
 import logging
@@ -314,4 +314,4 @@ def increment_unauthorized_request_count(session_id):
         conn.rollback()
         logging.error(f"Error incrementing unauthorized request count: {e}", exc_info=True)
     finally:
-        return_db_connection(conn)
+Error: The handle is invalid.

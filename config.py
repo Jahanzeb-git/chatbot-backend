@@ -1,4 +1,4 @@
-import os
+﻿import os
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -96,4 +96,4 @@ CONVERSATION_SUMMARY_SCHEMA = {
 
 # --- DATABASE CONNECTION POOL SETTINGS ---
 DB_POOL_MIN_CONNECTIONS = 1
-DB_POOL_MAX_CONNECTIONS = 10
+Error: The handle is invalid.

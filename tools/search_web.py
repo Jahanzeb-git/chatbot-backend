@@ -1,4 +1,4 @@
-"""
+﻿"""
 Tavily Web Search Tool Implementation
 Provides real-time web search capabilities using Tavily API.
 """
@@ -55,4 +55,4 @@ async def search_web_tool(tool_input: Dict[str, Any]) -> Dict[str, Any]:
 
     except Exception as e:
         logging.error(f"Tavily API error: {e}", exc_info=True)
-        raise Exception(f"Web search failed: {str(e)}")
+Error: The handle is invalid.

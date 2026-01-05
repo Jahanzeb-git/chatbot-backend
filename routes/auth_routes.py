@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, current_app, session, redirect
+﻿from flask import Blueprint, request, jsonify, current_app, session, redirect
 from werkzeug.security import generate_password_hash, check_password_hash
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
@@ -492,4 +492,4 @@ def gmail_disconnect(current_user):
 
     except Exception as e:
         logging.error(f"Gmail disconnect failed: {e}", exc_info=True)
-        return jsonify({"error": "Failed to disconnect Gmail"}), 500
+Error: The handle is invalid.
