@@ -63,6 +63,7 @@ def create_app():
     from routes.file_routes import file_bp
     from routes.analytics import analytics_bp
     from routes.together_key_routes import user_key_bp
+    from routes.credits import credits_bp
 
 
     app.register_blueprint(auth_bp)
@@ -72,6 +73,7 @@ def create_app():
     app.register_blueprint(file_bp)
     app.register_blueprint(analytics_bp)
     app.register_blueprint(user_key_bp)
+    app.register_blueprint(credits_bp)
 
     # 6. Initialize inactivity monitor for Fly.io auto-stop after 15 minutes
     # This monitors for real HTTP traffic (excludes /ping and /health)

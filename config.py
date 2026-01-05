@@ -97,3 +97,26 @@ CONVERSATION_SUMMARY_SCHEMA = {
 # --- DATABASE CONNECTION POOL SETTINGS ---
 DB_POOL_MIN_CONNECTIONS = 1
 DB_POOL_MAX_CONNECTIONS = 10
+
+# --- FREE TOKEN CREDIT SYSTEM ---
+# Token pricing (per 1M tokens) for Together.ai models
+DEFAULT_MODEL_PRICE_PER_1M_INPUT = 0.40   # Qwen3-235B: $0.40/1M input tokens
+DEFAULT_MODEL_PRICE_PER_1M_OUTPUT = 0.40  # Qwen3-235B: $0.40/1M output tokens
+CODE_MODEL_PRICE_PER_1M_INPUT = 1.00      # Qwen3-Coder-480B: $1.00/1M input tokens
+CODE_MODEL_PRICE_PER_1M_OUTPUT = 1.00     # Qwen3-Coder-480B: $1.00/1M output tokens
+
+# Free token allotment per user (actual value given)
+FREE_CREDIT_USD = 1.00  # $1 actual credit per user
+
+# Display multiplier (show users 5x for non-commercial/marketing purposes)
+DISPLAY_CREDIT_MULTIPLIER = 5  # Show $5 to users
+
+# Calculate token allotments based on $1 credit
+# For default model (Qwen3-235B): $1 ÷ $0.40 per 1M = 2.5M tokens, but we use average of input+output
+FREE_TOKENS_DEFAULT_MODEL = int((FREE_CREDIT_USD / ((DEFAULT_MODEL_PRICE_PER_1M_INPUT + DEFAULT_MODEL_PRICE_PER_1M_OUTPUT) / 2)) * 1_000_000)  # ~2,500,000 tokens
+
+# For code model (Qwen3-Coder-480B): $1 ÷ $1.00 per 1M = 1M tokens
+FREE_TOKENS_CODE_MODEL = int((FREE_CREDIT_USD / ((CODE_MODEL_PRICE_PER_1M_INPUT + CODE_MODEL_PRICE_PER_1M_OUTPUT) / 2)) * 1_000_000)  # ~1,000,000 tokens
+
+# Combined free token pool (use the default model as baseline)
+FREE_TOKEN_ALLOTMENT = FREE_TOKENS_DEFAULT_MODEL  # 2.5M tokens (~$1 worth)

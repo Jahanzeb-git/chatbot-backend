@@ -131,54 +131,78 @@ class TokenAwareMemoryManager:
         else:
             logging.warning("[TokenAwareMemory] Summarization failed ΓÇö buffer retained.")
 
-    def add_interaction(self, prompt, response, response_token_count, full_response_for_history=None, original_prompt=None):
+    def add_interaction(self, prompt, response, input_token_count, output_token_count, full_response_for_history=None, original_prompt=None):
         """
         Adds interaction with token-aware management
 
         Args:
             prompt: User input
             response: AI response (for context)
-            response_token_count: Token count of the response
+            input_token_count: Token count of the prompt
+            output_token_count: Token count of the response
             full_response_for_history: Full response for database storage
+            original_prompt: Original user prompt before file stitching
         """
         timestamp = datetime.now(timezone.utc).isoformat()
+        total_token_count = input_token_count + output_token_count
 
-        # Store in database
+        # Store in database (chat_history.token_count stores total for backward compat)
         db_response = full_response_for_history if full_response_for_history is not None else response
-        self._log_interaction_to_db(prompt, db_response, timestamp, response_token_count, original_prompt)
+        self._log_interaction_to_db(prompt, db_response, timestamp, total_token_count, original_prompt, input_token_count, output_token_count)
 
-        # Add to memory buffers
+        # Add to memory buffers with detailed token tracking
         self.history_buffer.append({
             "prompt": prompt,
             "response": response,
             "timestamp": timestamp,
-            "token_count": response_token_count
+            "input_tokens": input_token_count,
+            "output_tokens": output_token_count,
+            "total_tokens": total_token_count
         })
-        self.token_buffer.append(response_token_count)
+        self.token_buffer.append(total_token_count)
 
         logging.info(f"Added interaction: {len(self.history_buffer)} total, "
-                    f"{sum(self.token_buffer)} total tokens, "
-                    f"new response: {response_token_count} tokens")
+                    f"{sum(self.token_buffer)} total tokens "
+                    f"(input: {input_token_count}, output: {output_token_count})")
 
         # Check if summarization should be triggered
         if self._should_trigger_summarization():
             self._adaptive_prune()
 
-    def _log_interaction_to_db(self, prompt, response, timestamp, token_count, original_prompt=None):
+    def _log_interaction_to_db(self, prompt, response, timestamp, token_count, original_prompt, input_tokens, output_tokens):
         """Enhanced database logging with token tracking and original prompt."""
         conn = get_db_connection()
         try:
             cursor = conn.cursor()
+            # Insert into chat_history
             cursor.execute(
                 """INSERT INTO chat_history
                 (user_id, session_number, prompt, response, timestamp, token_count, original_prompt)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)""",
                 (self.user_id, self.session_number, prompt, response, timestamp, token_count, original_prompt)
             )
+
+            # Insert into token_usage for analytics
+            cursor.execute(
+                """INSERT INTO token_usage
+                (user_id, model, input_tokens, output_tokens, raw_timestamp, timestamp_iso, session_id, api_key_identifier, meta_json)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    self.user_id,
+                    'unknown',  # Model name will be passed from chat.py in next iteration
+                    input_tokens,
+                    output_tokens,
+                    int(datetime.now(timezone.utc).timestamp() * 1000),  # Unix ms
+                    timestamp,
+                    str(self.session_number),
+                    '_default',
+                    None
+                )
+            )
             conn.commit()
         except Exception as e:
             conn.rollback()
-            logging.error(f"Failed to log interaction to chat_history: {e}", exc_info=True)
+            logging.error(f"Failed to log interaction to database: {e}", exc_info=True)
         finally:
             return_db_connection(conn)
 
@@ -200,8 +224,13 @@ class TokenAwareMemoryManager:
                 loaded_buffer = json.loads(row['history_buffer'])
                 self.history_buffer = loaded_buffer
 
-                # Reconstruct token buffer from history buffer
-                self.token_buffer = [interaction.get('token_count', 0) for interaction in self.history_buffer]
+                # Reconstruct token buffer from history buffer (handle both old and new formats)
+                self.token_buffer = []
+                for interaction in self.history_buffer:
+                    # Try new format first (total_tokens), then old format (token_count)
+                    total = interaction.get('total_tokens') or interaction.get('token_count', 0)
+                    self.token_buffer.append(total)
+
                 logging.info(f"Loaded {len(self.history_buffer)} interactions from memory, "
                            f"{sum(self.token_buffer)} total tokens")
 
@@ -359,11 +388,13 @@ class MemoryManager(TokenAwareMemoryManager):
         Legacy method signature - estimates tokens server-side
         """
         # Import here to avoid circular imports
-        from chat import count_tokens, current_app
+        from routes.chat import count_tokens
+        from flask import current_app
 
-        # Estimate tokens for the response
+        # Estimate tokens for both prompt and response
         model_name = current_app.config.get('DEFAULT_LLM', 'meta-llama/Llama-3.3-70B-Instruct-Turbo')
-        estimated_tokens = count_tokens(response, model_name)
+        input_tokens = count_tokens(prompt, model_name)
+        output_tokens = count_tokens(response, model_name)
 
         # Call the new token-aware method
-        super().add_interaction(prompt, response, estimated_tokens, full_response_for_history, original_prompt)
+        super().add_interaction(prompt, response, input_tokens, output_tokens, full_response_for_history, original_prompt)

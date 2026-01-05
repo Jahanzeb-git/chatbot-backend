@@ -499,6 +499,38 @@ def get_or_create_anonymous_user(session_id):
     finally:
         return_db_connection(conn)
 
+def check_user_token_limit(user_id):
+    """
+    Check if user has exceeded their free token allotment.
+    Returns (has_exceeded, used_tokens, limit) tuple.
+    """
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+
+        # Get total tokens used by this user
+        cursor.execute(
+            """SELECT SUM(input_tokens + output_tokens) as total_tokens
+            FROM token_usage
+            WHERE user_id = %s""",
+            (user_id,)
+        )
+        result = cursor.fetchone()
+        used_tokens = int(result['total_tokens'] or 0)
+
+        # Get token limit from config
+        token_limit = current_app.config['FREE_TOKEN_ALLOTMENT']
+
+        has_exceeded = used_tokens >= token_limit
+
+        return (has_exceeded, used_tokens, token_limit)
+
+    except Exception as e:
+        logging.error(f"Error checking token limit: {e}", exc_info=True)
+        return (False, 0, 0)  # Allow on error to avoid blocking users
+    finally:
+        return_db_connection(conn)
+
 def get_user_chat_settings(user_id):
     conn = get_db_connection()
     try:
@@ -876,19 +908,23 @@ def chat(current_user):
         reason = validate_reason_parameter(data.get('reason'))
         chat_settings = get_user_chat_settings(user_id)
         api_key = chat_settings.get('together_api_key') or current_app.config['TOGETHER_API_KEY']
+
+        # Check if user has their own API key - if not, check token limits
+        if not chat_settings.get('together_api_key'):
+            has_exceeded, used_tokens, token_limit = check_user_token_limit(user_id)
+            if has_exceeded:
+                return jsonify({
+                    "error": "What?? It seems you've used all your tokens!! Don't you have shame? 😱 It's time to use your own API key; navigate to together.ai, get your API key, and paste that key in Settings → Together API Key!",
+                    "token_limit_exceeded": True,
+                    "used_tokens": used_tokens,
+                    "token_limit": token_limit
+                }), 429
     else:
-        # Create or get an anonymous user for unauthenticated sessions
-        user_id = get_or_create_anonymous_user(session_id)
-        if user_id is None:
-            return jsonify({"error": "Please login to continue conversation."}), 429
-            
-        request_count = get_unauthorized_request_count(session_id)
-        if request_count >= 5:  # Allow 5 requests before requiring login
-            return jsonify({"error": "Please login to continue conversation."}), 429
-        increment_unauthorized_request_count(session_id)
-        reason = "default"
-        chat_settings = {"temperature": 0.7, "top_p": 1.0, "system_prompt": "You are a helpful assistant.", "what_we_call_you": "User"}
-        api_key = current_app.config['TOGETHER_API_KEY']
+        # Unauthenticated users get a humorous rejection message
+        return jsonify({
+            "error": "Are you kidding me? How can you be so frank if I don't know you? Please login first! 😤",
+            "login_required": True
+        }), 401
 
     memory = TokenAwareMemoryManager(user_id, session_id)
     client = Together(api_key=api_key)
@@ -1258,10 +1294,11 @@ def chat(current_user):
                     final_json = merge_json_responses(code_mode_responses)
                     final_response = json.dumps(final_json, indent=2)
 
-                    output_token_count = count_tokens(final_response, model_name)
                     memory_query = stitched_prompt if file_data_list else original_prompt
+                    input_token_count = count_tokens(memory_query, model_name)
+                    output_token_count = count_tokens(final_response, model_name)
 
-                    memory.add_interaction(memory_query, final_response, output_token_count, original_prompt=original_prompt)
+                    memory.add_interaction(memory_query, final_response, input_token_count, output_token_count, original_prompt=original_prompt)
 
                     # Link files to chat
                     if current_user:
@@ -1303,10 +1340,11 @@ def chat(current_user):
 
                 elif reason == "reason" and not is_vision_request:
                     cleaned_answer = THINK_TAG_REGEX.sub('', default_mode_full_response).strip()
-                    cleaned_output_tokens = count_tokens(cleaned_answer, model_name)
                     memory_query = stitched_prompt if file_data_list else original_prompt
+                    input_token_count = count_tokens(memory_query, model_name)
+                    output_token_count = count_tokens(cleaned_answer, model_name)
 
-                    memory.add_interaction(memory_query, cleaned_answer, cleaned_output_tokens,
+                    memory.add_interaction(memory_query, cleaned_answer, input_token_count, output_token_count,
                                          full_response_for_history=default_mode_full_response,
                                          original_prompt=original_prompt)
 
@@ -1346,16 +1384,17 @@ def chat(current_user):
                         if email_tool_data:
                             store_email_tool_data(user_id, session_id, last_chat_id, email_tool_data)
 
-                    logging.info(f"Added reasoning interaction with tool usage: {cleaned_output_tokens} tokens")
+                    logging.info(f"Added reasoning interaction with tool usage: {output_token_count} tokens")
 
                 else:
                     # Default mode or vision
                     final_response = default_mode_full_response if default_mode_full_response else ''.join(chunks).strip()
-                    output_token_count = count_tokens(final_response, model_name)
-
                     memory_query = f"[Image Analysis] {original_prompt}" if is_vision_request else (stitched_prompt if file_data_list else original_prompt)
 
-                    memory.add_interaction(memory_query, final_response, output_token_count, original_prompt=original_prompt)
+                    input_token_count = count_tokens(memory_query, model_name)
+                    output_token_count = count_tokens(final_response, model_name)
+
+                    memory.add_interaction(memory_query, final_response, input_token_count, output_token_count, original_prompt=original_prompt)
 
                     # Link files
                     if current_user:
