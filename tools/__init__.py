@@ -97,4 +97,4 @@ def format_tool_result_for_llm(tool_result: Dict[str, Any]) -> str:
         Formatted string for LLM context
     """
     import json
-Error: The handle is invalid.
+    return json.dumps(tool_result, indent=2, ensure_ascii=False)

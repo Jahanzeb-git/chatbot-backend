@@ -1,2 +1,1 @@
-﻿Error: The handle is invalid.
-Connecting to fdaa:33:d5cd:a7b:12a:36a5:13e2:2...
+﻿

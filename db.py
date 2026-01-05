@@ -314,4 +314,4 @@ def increment_unauthorized_request_count(session_id):
         conn.rollback()
         logging.error(f"Error incrementing unauthorized request count: {e}", exc_info=True)
     finally:
-Error: The handle is invalid.
+        return_db_connection(conn)

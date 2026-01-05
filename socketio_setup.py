@@ -152,4 +152,4 @@ def init_socketio(app):
             emit('error', {'message': str(e)})
 
     logging.info("Flask-SocketIO initialized for email tool")
-Error: The handle is invalid.
+    return socketio

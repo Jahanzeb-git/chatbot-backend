@@ -579,4 +579,4 @@ def _format_result_for_prompt(result_data) -> str:
         # Show dict concisely
         return json.dumps(result_data, indent=2)
     else:
-Error: The handle is invalid.
+      return str(result_data)

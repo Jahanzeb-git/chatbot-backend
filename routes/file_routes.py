@@ -584,4 +584,4 @@ def clear_upload(current_user):
         del current_app.file_cache[cache_key]
         return jsonify({"message": "Staged files cleared successfully"}), 200
 
-Error: The handle is invalid.
+    return jsonify({"message": "No files to clear"}), 200

@@ -117,4 +117,4 @@ def pre_fork(server, worker):
 
 def post_fork(server, worker):
     """Called just after a worker has been forked."""
-Error: The handle is invalid.
+    server.log.info(f"Worker spawned with pid: {worker.pid}")

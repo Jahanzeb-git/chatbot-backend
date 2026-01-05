@@ -1442,4 +1442,4 @@ def get_memory_stats(current_user, session_id):
         return jsonify(stats)
     except Exception as e:
         logging.error(f"Failed to get memory stats: {e}", exc_info=True)
-Error: The handle is invalid.
+        return jsonify({"error": "Failed to retrieve memory stats"}), 500

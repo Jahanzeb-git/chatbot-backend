@@ -241,4 +241,4 @@ def get_token_usage():
         logger.exception("Database read failed: %s", e)
         return jsonify({"ok": False, "error": "Database read failed", "details": str(e)}), 500
     finally:
-Error: The handle is invalid.
+        return_db_connection(conn)

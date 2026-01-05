@@ -225,4 +225,4 @@ def create_app():
 # This part is for running locally with `python app.py`
 # For production, you would point your WSGI server to the `app` object.
 app = create_app()
-Error: The handle is invalid.
+socketio = app.socketio  # Get socketio instance

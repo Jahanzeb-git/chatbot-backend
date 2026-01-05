@@ -724,5 +724,4 @@ async def execute_email_tool(
         socketio_instance=socketio_instance,
         client_context=client_context
     )
-
-Error: The handle is invalid.
+    return await agent.execute()

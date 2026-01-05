@@ -492,4 +492,4 @@ def gmail_disconnect(current_user):
 
     except Exception as e:
         logging.error(f"Gmail disconnect failed: {e}", exc_info=True)
-Error: The handle is invalid.
+        return jsonify({"error": "Failed to disconnect Gmail"}), 500

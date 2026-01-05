@@ -604,4 +604,4 @@ def get_search_web_urls(current_user, session_number):
             'error': str(e)
         }), 200
     finally:
-Error: The handle is invalid.
+        return_db_connection(conn)

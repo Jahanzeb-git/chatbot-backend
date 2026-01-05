@@ -261,4 +261,4 @@ def remove_key(current_user):
 
     except Exception as e:
         logging.exception("Unexpected error in remove_key")
-Error: The handle is invalid.
+        return jsonify({"message": "Internal server error"}), 500

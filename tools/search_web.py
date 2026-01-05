@@ -55,4 +55,4 @@ async def search_web_tool(tool_input: Dict[str, Any]) -> Dict[str, Any]:
 
     except Exception as e:
         logging.error(f"Tavily API error: {e}", exc_info=True)
-Error: The handle is invalid.
+        raise Exception(f"Web search failed: {str(e)}")
